@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Home Dashboard</title>
+
+  <!-- GridStack -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack-extra.min.css" />
+
+  <!-- Material Design Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7/css/materialdesignicons.min.css" />
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <!-- Top toolbar (only visible in edit mode) -->
+  <header id="toolbar" class="toolbar toolbar--hidden">
+    <div class="toolbar__left">
+      <span class="toolbar__title">Edit Layout</span>
+    </div>
+    <div class="toolbar__right">
+      <button id="btn-add-tile" class="btn btn--accent" title="Add tile">
+        <i class="mdi mdi-plus"></i> Add Tile
+      </button>
+      <button id="btn-done" class="btn btn--primary" title="Save & exit edit mode">
+        <i class="mdi mdi-check"></i> Done
+      </button>
+    </div>
+  </header>
+
+  <!-- Dashboard grid -->
+  <main id="dashboard" class="dashboard">
+    <div class="grid-stack"></div>
+  </main>
+
+  <!-- Floating edit button (visible in normal mode) -->
+  <button id="btn-edit" class="fab" title="Edit layout">
+    <i class="mdi mdi-pencil"></i>
+  </button>
+
+  <!-- Connection status indicator -->
+  <div id="status-indicator" class="status-indicator status-indicator--connecting">
+    <i class="mdi mdi-circle"></i>
+  </div>
+
+  <!-- Add-tile modal -->
+  <div id="add-tile-modal" class="modal modal--hidden">
+    <div class="modal__backdrop"></div>
+    <div class="modal__content">
+      <h2>Add Tile</h2>
+      <form id="add-tile-form">
+        <label>
+          Entity ID
+          <select id="tile-entity" required>
+            <option value="">Loading entities…</option>
+          </select>
+        </label>
+        <label>
+          Label
+          <input id="tile-label" type="text" required placeholder="e.g. Living Room" />
+        </label>
+        <label>
+          Icon (MDI name)
+          <input id="tile-icon" type="text" value="mdi-lightbulb" placeholder="mdi-lightbulb" />
+        </label>
+        <div class="modal__actions">
+          <button type="button" id="btn-cancel-tile" class="btn">Cancel</button>
+          <button type="submit" class="btn btn--primary">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- GridStack JS -->
+  <script src="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack-all.js"></script>
+
+  <!-- App JS -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

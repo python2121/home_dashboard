@@ -1,0 +1,361 @@
+/* ===================================================================
+   Home Dashboard — Styles
+   Dark kiosk theme with large touch-friendly tiles.
+   =================================================================== */
+
+/* ---------- Reset & base ---------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface-hover: #1a2744;
+  --tile-on: #0f3460;
+  --tile-off: #262640;
+  --accent: #e94560;
+  --primary: #537ec5;
+  --text: #eaeaea;
+  --text-dim: #8892a4;
+  --icon-on: #ffd369;
+  --icon-off: #6b7280;
+  --radius: 16px;
+  --toolbar-h: 56px;
+  --transition: 0.2s ease;
+
+  color-scheme: dark;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ---------- Toolbar ---------- */
+.toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--toolbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: 100;
+  transition: transform var(--transition);
+}
+
+.toolbar--hidden {
+  transform: translateY(-100%);
+}
+
+.toolbar__title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.toolbar__right {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  transition: background var(--transition);
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.btn--primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  background: #4570b5;
+}
+
+.btn--accent {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn--accent:hover {
+  background: #d13a52;
+}
+
+/* Floating action button */
+.fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  z-index: 90;
+  transition: background var(--transition), transform var(--transition);
+}
+
+.fab:hover {
+  background: #4570b5;
+  transform: scale(1.05);
+}
+
+.fab--hidden {
+  display: none;
+}
+
+/* ---------- Dashboard / Grid ---------- */
+.dashboard {
+  height: 100%;
+  padding: 12px;
+  transition: padding-top var(--transition);
+}
+
+.dashboard--editing {
+  padding-top: calc(var(--toolbar-h) + 12px);
+}
+
+/* GridStack overrides */
+.grid-stack {
+  min-height: 100%;
+}
+
+.grid-stack-item-content {
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition), box-shadow var(--transition);
+}
+
+/* Tile states */
+.tile--off .grid-stack-item-content {
+  background: var(--tile-off);
+}
+
+.tile--on .grid-stack-item-content {
+  background: var(--tile-on);
+  box-shadow: 0 0 20px rgba(15, 52, 96, 0.5);
+}
+
+.tile--off .grid-stack-item-content:hover {
+  background: var(--surface-hover);
+}
+
+.tile--on .grid-stack-item-content:hover {
+  background: #123d6e;
+}
+
+/* Active press feedback */
+.tile--off .grid-stack-item-content:active {
+  background: var(--surface);
+}
+
+.tile--on .grid-stack-item-content:active {
+  background: #0d2e50;
+}
+
+/* Tile icon */
+.tile__icon {
+  font-size: 2.8rem;
+  line-height: 1;
+  transition: color var(--transition), font-size var(--transition);
+}
+
+.tile--on .tile__icon {
+  color: var(--icon-on);
+}
+
+.tile--off .tile__icon {
+  color: var(--icon-off);
+}
+
+/* Tile label */
+.tile__label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: center;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  transition: font-size var(--transition);
+}
+
+.tile--on .tile__label {
+  color: var(--text);
+}
+
+/* Scaling tile contents based on widget size — GridStack sets min-height via style */
+.grid-stack-item[gs-w="1"] .tile__icon { font-size: 1.8rem; }
+.grid-stack-item[gs-w="1"] .tile__label { font-size: 0.7rem; }
+.grid-stack-item[gs-w="3"] .tile__icon,
+.grid-stack-item[gs-w="4"] .tile__icon { font-size: 3.5rem; }
+.grid-stack-item[gs-w="3"] .tile__label,
+.grid-stack-item[gs-w="4"] .tile__label { font-size: 1rem; }
+
+.grid-stack-item[gs-h="1"] .tile__icon { font-size: 1.6rem; }
+.grid-stack-item[gs-h="1"] .tile__label { display: none; }
+
+/* Remove button (edit mode) */
+.tile__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.85rem;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.dashboard--editing .tile__remove {
+  display: flex;
+}
+
+/* ---------- Status indicator ---------- */
+.status-indicator {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  font-size: 0.6rem;
+  z-index: 80;
+  transition: color var(--transition);
+}
+
+.status-indicator--ok { color: #4caf50; }
+.status-indicator--connecting { color: #ff9800; }
+.status-indicator--error { color: var(--accent); }
+
+/* In edit mode, move indicator below toolbar */
+.dashboard--editing ~ .status-indicator {
+  top: calc(var(--toolbar-h) + 12px);
+}
+
+/* ---------- Modal ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal--hidden {
+  display: none;
+}
+
+.modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.modal__content {
+  position: relative;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal__content h2 {
+  margin-bottom: 16px;
+  font-size: 1.2rem;
+}
+
+.modal__content label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.modal__content input,
+.modal__content select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.modal__content input:focus,
+.modal__content select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* ---------- Edit-mode grid visual hints ---------- */
+.dashboard--editing .grid-stack-item-content {
+  outline: 2px dashed rgba(255, 255, 255, 0.15);
+}
+
+/* GridStack placeholder styling */
+.grid-stack-placeholder > .placeholder-content {
+  border: 2px dashed var(--primary) !important;
+  border-radius: var(--radius);
+  background: rgba(83, 126, 197, 0.1) !important;
+}

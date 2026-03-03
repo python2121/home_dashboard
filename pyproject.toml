@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "home-dashboard"
+version = "0.1.0"
+description = "Self-hosted Home Assistant dashboard with touch-friendly tile UI"
+authors = []
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.115"
+uvicorn = {extras = ["standard"], version = "^0.34"}
+httpx = "^0.28"
+jinja2 = "^3.1"
+pydantic-settings = "^2.7"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-asyncio = "^0.25"
+httpx = "^0.28"
+ruff = "^0.9"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "S"]
+ignore = ["S104", "UP006", "UP007", "UP035"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106"]

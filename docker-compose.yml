@@ -1,0 +1,19 @@
+services:
+  dashboard:
+    build: .
+    container_name: home-dashboard
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist tile layout across container restarts
+      - dashboard-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  dashboard-data:
