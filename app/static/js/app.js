@@ -231,10 +231,7 @@ const DashboardApp = (() => {
       const type = el.dataset.tileType || "entity";
       if (type === "weather") continue;
       if (type === "scene") {
-        // Skip poll-driven refresh during cooldown to avoid overwriting optimistic state
-        if (!SceneTiles.isInCooldown()) {
-          SceneTiles.updateSceneState(el, entityStates);
-        }
+        SceneTiles.updateSceneState(el, entityStates);
         continue;
       }
       // Entity tile — update on/off class and brightness slider

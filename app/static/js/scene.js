@@ -9,18 +9,10 @@
 "use strict";
 
 const SceneTiles = (() => {
-  // ── Cooldown — suppress poll-driven state refresh briefly after toggle ──
-
-  let _cooldownUntil = 0;
-  const COOLDOWN_MS = 3000;
-
-  function startCooldown() {
-    _cooldownUntil = Date.now() + COOLDOWN_MS;
-  }
-
-  function isInCooldown() {
-    return Date.now() < _cooldownUntil;
-  }
+  // ── Explicit scene state tracking ─────────────────────────────────
+  // Maps tile ID → boolean.  Populated by toggle actions.
+  // Absent key = no tracked state yet (initial load uses HA fallback).
+  const _sceneStates = {};
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -68,19 +60,33 @@ const SceneTiles = (() => {
   // ── State ────────────────────────────────────────────────────────────
 
   /**
-   * A scene is "on" only when ALL members are on AND each member's
-   * current brightness is within ±3 of the scene's target brightness.
+   * Determine whether a scene tile should show as "on".
+   *
+   * 1. If we have explicit tracked state from a toggle, trust it —
+   *    UNLESS HA now says the lights are off (external change).
+   * 2. Otherwise (initial page load), fall back to checking whether
+   *    all member lights are on in HA.
    */
   function isSceneOn(el, entityStates) {
+    const tileId  = el.dataset.tileId;
     const members = JSON.parse(el.dataset.members || "[]");
     if (members.length === 0) return false;
-    return members.every((m) => {
-      const st = entityStates[m.entity_id];
-      if (!st || st.state !== "on") return false;
-      const current = st.attributes?.brightness;
-      if (current == null) return false;
-      return Math.abs(current - m.brightness) <= 3;
-    });
+
+    const allMembersOn = members.every(
+      (m) => entityStates[m.entity_id]?.state === "on"
+    );
+
+    if (tileId in _sceneStates) {
+      // Tracked "on" but HA shows lights are off → external change, clear tracking
+      if (_sceneStates[tileId] && !allMembersOn) {
+        delete _sceneStates[tileId];
+        return false;
+      }
+      return _sceneStates[tileId];
+    }
+
+    // No tracked state — best-effort from HA (e.g. fresh page load)
+    return allMembersOn;
   }
 
   function updateSceneState(el, entityStates) {
@@ -91,38 +97,33 @@ const SceneTiles = (() => {
 
   // ── Toggle ───────────────────────────────────────────────────────────
 
-  /** Refresh visual state of all scene tiles except the given one. */
-  function refreshOtherScenes(excludeEl, entityStates) {
-    document.querySelectorAll('[data-tile-type="scene"]').forEach((el) => {
-      if (el !== excludeEl) updateSceneState(el, entityStates);
-    });
-  }
-
   async function handleSceneToggle(el, entityStates) {
-    startCooldown();
+    const tileId  = el.dataset.tileId;
     const members = JSON.parse(el.dataset.members || "[]");
     const wasOn   = isSceneOn(el, entityStates);
     const action  = wasOn ? "off" : "on";
 
-    // Save previous state for rollback
-    const prev = members.map((m) => {
-      const st = entityStates[m.entity_id];
-      return { entity_id: m.entity_id, state: st?.state, brightness: st?.attributes?.brightness };
-    });
+    // ── Track state explicitly ──
+    _sceneStates[tileId] = !wasOn;
 
-    // Optimistic update — set state AND brightness so cross-scene checks work
+    // If turning on, mark overlapping scenes as off
+    if (action === "on") {
+      const memberIds = new Set(members.map((m) => m.entity_id));
+      document.querySelectorAll('[data-tile-type="scene"]').forEach((otherEl) => {
+        if (otherEl === el) return;
+        const otherMembers = JSON.parse(otherEl.dataset.members || "[]");
+        const overlaps = otherMembers.some((m) => memberIds.has(m.entity_id));
+        if (overlaps) {
+          _sceneStates[otherEl.dataset.tileId] = false;
+          otherEl.classList.remove("tile--on");
+          otherEl.classList.add("tile--off");
+        }
+      });
+    }
+
+    // Optimistic UI for this tile
     el.classList.toggle("tile--on", !wasOn);
     el.classList.toggle("tile--off", wasOn);
-    for (const m of members) {
-      if (entityStates[m.entity_id]) {
-        entityStates[m.entity_id].state = action;
-        if (action === "on") {
-          if (!entityStates[m.entity_id].attributes) entityStates[m.entity_id].attributes = {};
-          entityStates[m.entity_id].attributes.brightness = m.brightness;
-        }
-      }
-    }
-    refreshOtherScenes(el, entityStates);
 
     try {
       const res = await fetch("/api/ha/scene-toggle", {
@@ -133,33 +134,31 @@ const SceneTiles = (() => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } catch (err) {
       console.error("Scene toggle failed:", err);
-      // Revert optimistic update
+      // Revert tracked state and UI
+      _sceneStates[tileId] = wasOn;
       el.classList.toggle("tile--on", wasOn);
       el.classList.toggle("tile--off", !wasOn);
-      for (const p of prev) {
-        if (entityStates[p.entity_id]) {
-          entityStates[p.entity_id].state = p.state;
-          if (p.brightness != null) {
-            if (!entityStates[p.entity_id].attributes) entityStates[p.entity_id].attributes = {};
-            entityStates[p.entity_id].attributes.brightness = p.brightness;
+      // Re-evaluate overlapping scenes from HA state
+      if (action === "on") {
+        const memberIds = new Set(members.map((m) => m.entity_id));
+        document.querySelectorAll('[data-tile-type="scene"]').forEach((otherEl) => {
+          if (otherEl === el) return;
+          const otherMembers = JSON.parse(otherEl.dataset.members || "[]");
+          if (otherMembers.some((m) => memberIds.has(m.entity_id))) {
+            delete _sceneStates[otherEl.dataset.tileId];
+            updateSceneState(otherEl, entityStates);
           }
-        }
+        });
       }
-      refreshOtherScenes(el, entityStates);
     }
   }
 
   // ── Tile creation ────────────────────────────────────────────────────
 
   function addSceneTileToGrid(tile, grid, entityStates) {
-    // Use brightness-matching logic consistent with isSceneOn
-    const on = tile.members.length > 0 && tile.members.every((m) => {
-      const st = entityStates[m.entity_id];
-      if (!st || st.state !== "on") return false;
-      const current = st.attributes?.brightness;
-      if (current == null) return false;
-      return Math.abs(current - m.brightness) <= 3;
-    });
+    const on = tile.members.length > 0 && tile.members.every(
+      (m) => entityStates[m.entity_id]?.state === "on"
+    );
 
     const el = document.createElement("div");
     el.className = on ? "tile--on" : "tile--off";
@@ -399,5 +398,5 @@ const SceneTiles = (() => {
   }
 
   // ── Public API ───────────────────────────────────────────────────────
-  return { addSceneTileToGrid, updateSceneState, handleSceneToggle, isInCooldown, initModal, resetModal, populateForEdit };
+  return { addSceneTileToGrid, updateSceneState, handleSceneToggle, initModal, resetModal, populateForEdit };
 })();
