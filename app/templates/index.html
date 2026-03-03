@@ -53,31 +53,118 @@
     <div class="modal__backdrop"></div>
     <div class="modal__content">
       <h2>Add Tile</h2>
-      <form id="add-tile-form">
-        <label>
-          Entity ID
-          <select id="tile-entity" required>
-            <option value="">Loading entities…</option>
-          </select>
-        </label>
-        <label>
-          Label
-          <input id="tile-label" type="text" required placeholder="e.g. Living Room" />
-        </label>
-        <label>
-          Icon (MDI name)
-          <input id="tile-icon" type="text" value="mdi-lightbulb" placeholder="mdi-lightbulb" />
-        </label>
-        <div class="modal__actions">
-          <button type="button" id="btn-cancel-tile" class="btn">Cancel</button>
-          <button type="submit" class="btn btn--primary">Add</button>
+
+      <!-- Tab switcher -->
+      <div class="modal__tabs">
+        <button class="modal__tab modal__tab--active" data-tab="entity">Entity</button>
+        <button class="modal__tab" data-tab="scene">Scene</button>
+        <button class="modal__tab" data-tab="weather">Weather</button>
+      </div>
+
+      <!-- Entity form -->
+      <div id="entity-form-section">
+        <form id="add-tile-form">
+          <label>
+            Entity ID
+            <select id="tile-entity" required>
+              <option value="">Loading entities…</option>
+            </select>
+          </label>
+          <label>
+            Label
+            <input id="tile-label" type="text" required placeholder="e.g. Living Room" />
+          </label>
+          <label>
+            Icon (MDI name)
+            <input id="tile-icon" type="text" value="mdi-lightbulb" placeholder="mdi-lightbulb" />
+          </label>
+          <div class="modal__actions">
+            <button type="button" id="btn-cancel-tile" class="btn">Cancel</button>
+            <button type="submit" class="btn btn--primary">Add</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Scene form (two-step) -->
+      <div id="scene-form-section" class="section--hidden">
+
+        <!-- Step 1: pick label, icon, lights -->
+        <div id="scene-step-1">
+          <label>
+            Label
+            <input id="scene-label" type="text" placeholder="e.g. Living Room Bright" />
+          </label>
+          <label>
+            Icon (MDI name)
+            <input id="scene-icon" type="text" value="mdi-lightbulb-group" placeholder="mdi-lightbulb-group" />
+          </label>
+          <label>
+            Lights to control
+            <small style="display:block; color: var(--text-dim); margin: 2px 0 4px;">
+              Hold Ctrl / ⌘ to select multiple
+            </small>
+            <select id="scene-entities" multiple>
+              <option value="">Loading entities…</option>
+            </select>
+          </label>
+          <div class="modal__actions">
+            <button type="button" id="btn-cancel-scene" class="btn">Cancel</button>
+            <button type="button" id="btn-scene-next" class="btn btn--primary">Next →</button>
+          </div>
         </div>
-      </form>
+
+        <!-- Step 2: per-light brightness sliders with live preview -->
+        <div id="scene-step-2" class="section--hidden">
+          <p class="scene-step-hint">Drag each slider — lights update live.</p>
+          <div id="scene-member-list"></div>
+          <div class="modal__actions">
+            <button type="button" id="btn-scene-back" class="btn">← Back</button>
+            <button type="button" id="btn-scene-confirm" class="btn btn--primary">Confirm</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Weather form -->
+      <div id="weather-form-section" class="section--hidden">
+        <form id="add-weather-form">
+          <label>
+            Label
+            <input id="weather-label" type="text" placeholder="e.g. Home Weather" />
+          </label>
+          <label>
+            ZIP / Postal Code
+            <input id="weather-zip" type="text" required placeholder="e.g. 10001" />
+          </label>
+          <label>
+            Country Code
+            <input id="weather-country" type="text" value="US" placeholder="US" maxlength="4" />
+          </label>
+          <label>
+            Temperature Unit
+            <select id="weather-unit">
+              <option value="fahrenheit">Fahrenheit (°F)</option>
+              <option value="celsius">Celsius (°C)</option>
+            </select>
+          </label>
+          <div class="modal__actions">
+            <button type="button" id="btn-cancel-weather" class="btn">Cancel</button>
+            <button type="submit" class="btn btn--primary">Add</button>
+          </div>
+        </form>
+      </div>
+
     </div>
   </div>
 
   <!-- GridStack JS -->
   <script src="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack-all.js"></script>
+
+  <!-- Scene tile JS (must load before app.js) -->
+  <script src="/static/js/scene.js"></script>
+
+  <!-- Weather tile JS (must load before app.js) -->
+  <script src="/static/js/weather.js"></script>
 
   <!-- App JS -->
   <script src="/static/js/app.js"></script>

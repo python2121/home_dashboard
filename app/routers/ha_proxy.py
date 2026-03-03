@@ -3,6 +3,7 @@
 The browser never sees the HA token — all auth happens server-side.
 """
 
+import asyncio
 import logging
 import re
 from typing import Any, Optional
@@ -11,7 +12,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, status
 
 from app.config import settings
-from app.models import ServiceCall
+from app.models import SceneToggle, ServiceCall
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ha", tags=["home-assistant"])
@@ -123,6 +124,44 @@ async def call_service(domain: str, service: str, body: ServiceCall) -> Any:
         extra = {k: v for k, v in body.extra.items() if k != "entity_id"}
         payload.update(extra)
     return await _ha_request("POST", f"services/{domain}/{service}", json_body=payload)
+
+
+@router.post("/scene-toggle")
+async def scene_toggle(body: SceneToggle) -> Any:
+    """Toggle a group of lights on or off.
+
+    When turning on, each member is set to its own brightness concurrently.
+    When turning off, all members are turned off in a single HA call.
+    All entity_ids must belong to the 'light' domain.
+    """
+    for member in body.members:
+        _validate_entity_id(member.entity_id)
+        domain = member.entity_id.split(".", 1)[0]
+        if domain != "light":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Scene tiles only support 'light' entities, got: {member.entity_id!r}",
+            )
+
+    if body.action == "on":
+        # Fan out — each member may have a different brightness
+        results = await asyncio.gather(
+            *[
+                _ha_request(
+                    "POST",
+                    "services/light/turn_on",
+                    json_body={"entity_id": member.entity_id, "brightness": member.brightness},
+                )
+                for member in body.members
+            ]
+        )
+        return results
+    else:
+        return await _ha_request(
+            "POST",
+            "services/light/turn_off",
+            json_body={"entity_id": [m.entity_id for m in body.members]},
+        )
 
 
 @router.post("/toggle/{entity_id}")

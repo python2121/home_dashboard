@@ -3,6 +3,16 @@
 import pytest
 from fastapi.testclient import TestClient
 
+import app.routers.weather as _weather_module
+
+
+@pytest.fixture(autouse=True)
+def _clear_weather_cache():
+    """Reset the in-process weather cache before and after every test."""
+    _weather_module._cache.clear()
+    yield
+    _weather_module._cache.clear()
+
 
 @pytest.fixture(autouse=True)
 def _isolate_settings(tmp_path, monkeypatch):

@@ -194,3 +194,91 @@ def test_ha_unauthorized(mock_client_cls, client):
     resp = client.get("/api/ha/states")
     assert resp.status_code == 401
     assert "token" in resp.json()["detail"].lower()
+
+
+# ── Scene toggle ─────────────────────────────────────────────────────────────
+
+
+@patch("app.routers.ha_proxy.httpx.AsyncClient")
+def test_scene_toggle_on(mock_client_cls, client):
+    """Turn on calls turn_on individually per member with its own brightness."""
+    mock_instance = AsyncMock()
+    mock_instance.request = AsyncMock(return_value=_mock_response(200, []))
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_instance
+
+    resp = client.post(
+        "/api/ha/scene-toggle",
+        json={
+            "members": [
+                {"entity_id": "light.living_room", "brightness": 200},
+                {"entity_id": "light.lamp", "brightness": 128},
+            ],
+            "action": "on",
+        },
+    )
+    assert resp.status_code == 200
+
+    # Two members → two separate turn_on calls
+    assert mock_instance.request.call_count == 2
+    urls = [call.kwargs["url"] for call in mock_instance.request.call_args_list]
+    assert all("services/light/turn_on" in url for url in urls)
+    payloads = [call.kwargs["json"] for call in mock_instance.request.call_args_list]
+    by_entity = {p["entity_id"]: p["brightness"] for p in payloads}
+    assert by_entity["light.living_room"] == 200
+    assert by_entity["light.lamp"] == 128
+
+
+@patch("app.routers.ha_proxy.httpx.AsyncClient")
+def test_scene_toggle_off(mock_client_cls, client):
+    """Turn off sends a single call with all entity IDs."""
+    mock_instance = AsyncMock()
+    mock_instance.request = AsyncMock(return_value=_mock_response(200, []))
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_instance
+
+    resp = client.post(
+        "/api/ha/scene-toggle",
+        json={
+            "members": [{"entity_id": "light.living_room", "brightness": 255}],
+            "action": "off",
+        },
+    )
+    assert resp.status_code == 200
+
+    call_args = mock_instance.request.call_args
+    assert "services/light/turn_off" in call_args.kwargs["url"]
+    assert call_args.kwargs["json"]["entity_id"] == ["light.living_room"]
+
+
+def test_scene_toggle_rejects_non_light_entity(client):
+    resp = client.post(
+        "/api/ha/scene-toggle",
+        json={
+            "members": [{"entity_id": "switch.garage", "brightness": 255}],
+            "action": "on",
+        },
+    )
+    assert resp.status_code == 400
+    assert "light" in resp.json()["detail"]
+
+
+def test_scene_toggle_rejects_invalid_entity_id(client):
+    resp = client.post(
+        "/api/ha/scene-toggle",
+        json={
+            "members": [{"entity_id": "LIGHT.UPPER_CASE", "brightness": 255}],
+            "action": "on",
+        },
+    )
+    assert resp.status_code == 400
+
+
+def test_scene_toggle_rejects_empty_members(client):
+    resp = client.post(
+        "/api/ha/scene-toggle",
+        json={"members": [], "action": "on"},
+    )
+    assert resp.status_code == 422

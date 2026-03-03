@@ -42,7 +42,6 @@ All secrets live in a `.env` file at the project root (never committed). Copy `.
 ```
 HA_BASE_URL=http://192.168.x.x:8123
 HA_TOKEN=<long-lived access token>
-SECRET_KEY=<random string for session signing>
 ```
 
 The application loads config via Pydantic `BaseSettings`. No credentials are hardcoded anywhere.
@@ -54,13 +53,16 @@ home_dashboard/
 ├── app/
 │   ├── main.py            # FastAPI app entrypoint
 │   ├── config.py          # Settings loaded from .env
-│   ├── models.py          # Pydantic models (Tile, Layout, ServiceCall)
+│   ├── models.py          # Pydantic models: EntityTile, WeatherTile (discriminated union), Layout, ServiceCall
 │   ├── routers/
 │   │   ├── ha_proxy.py    # /api/ha/* proxy routes to Home Assistant
-│   │   └── layout.py      # /api/layout — tile layout persistence
+│   │   ├── layout.py      # /api/layout — tile layout persistence
+│   │   └── weather.py     # /api/weather — Open-Meteo forecast + Nominatim geocoding, 30-min cache
 │   ├── static/
 │   │   ├── css/style.css  # Dark kiosk theme
-│   │   └── js/app.js      # GridStack grid, edit mode, state polling
+│   │   └── js/
+│   │       ├── app.js     # GridStack grid, edit mode, state polling (type-aware)
+│   │       └── weather.js # WeatherTiles module — rendering, modal tabs, refresh timer
 │   └── templates/
 │       └── index.html     # Jinja2 shell, loads GridStack + MDI from CDN
 ├── tests/
@@ -71,6 +73,17 @@ home_dashboard/
 ├── pyproject.toml
 └── poetry.lock
 ```
+
+## After Making Code Changes
+
+Always run the test suite and linter before considering a task complete:
+
+```bash
+poetry run pytest -v
+poetry run ruff check .
+```
+
+Both must pass with no errors before the work is done.
 
 ## Commands
 

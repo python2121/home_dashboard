@@ -2,7 +2,10 @@
  * Home Dashboard — Main application.
  *
  * Manages the GridStack tile grid, edit mode, Home Assistant entity state
- * polling, and layout persistence.
+ * polling, layout persistence, and brightness control.
+ *
+ * Scene tile logic is delegated to SceneTiles (scene.js).
+ * Weather tile logic is delegated to WeatherTiles (weather.js).
  */
 
 "use strict";
@@ -13,6 +16,8 @@ const DashboardApp = (() => {
   let editing = false;
   let entityStates = {};      // entity_id → {state, attributes, …}
   let pollTimer = null;
+  let brightnessTimer = null;
+  let editingTileEl = null;   // null = add mode, DOM element = edit mode
   const POLL_INTERVAL = 5000; // ms
 
   // ── DOM refs ───────────────────────────────────────────────────────
@@ -28,64 +33,72 @@ const DashboardApp = (() => {
 
   // ── Helpers ────────────────────────────────────────────────────────
 
-  /** Generate a short unique id for new tiles. */
   function uid() {
     return "tile_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
 
-  /** Escape HTML to prevent XSS when inserting user-provided text. */
   function escapeHTML(str) {
     const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
   }
 
-  /** Validate an MDI icon class name (letters, numbers, hyphens only). */
   function sanitizeIconClass(icon) {
     return /^mdi-[a-z0-9-]+$/.test(icon) ? icon : "mdi-toggle-switch";
   }
 
-  /** Map entity_id prefix to a sensible default MDI icon. */
   function defaultIcon(entityId) {
     const domain = entityId.split(".")[0];
     const map = {
-      light:  "mdi-lightbulb",
-      switch: "mdi-toggle-switch",
-      fan:    "mdi-fan",
-      cover:  "mdi-blinds",
-      lock:   "mdi-lock",
-      climate:"mdi-thermostat",
+      light:        "mdi-lightbulb",
+      switch:       "mdi-toggle-switch",
+      fan:          "mdi-fan",
+      cover:        "mdi-blinds",
+      lock:         "mdi-lock",
+      climate:      "mdi-thermostat",
       media_player: "mdi-speaker",
     };
     return map[domain] || "mdi-toggle-switch";
   }
 
-  /** Derive HA domain from entity_id. */
   function domainOf(entityId) {
     return entityId.split(".")[0];
   }
 
-  /** Is the entity currently "on"? */
   function isOn(entityId) {
     const s = entityStates[entityId];
     return s && s.state === "on";
   }
 
-  /** Build the inner HTML for a tile (all user text is escaped). */
+  // ── Tile HTML builders ─────────────────────────────────────────────
+
+  /** Build inner HTML for an entity tile. Includes a brightness slider for lights. */
   function tileInnerHTML(tile) {
-    const safeIcon = sanitizeIconClass(tile.icon);
+    const safeIcon  = sanitizeIconClass(tile.icon);
     const safeLabel = escapeHTML(tile.label);
-    const safeId = escapeHTML(tile.id);
+    const safeId    = escapeHTML(tile.id);
+    const safeEid   = escapeHTML(tile.entity_id);
+
+    const sliderHTML = tile.domain === "light" ? `
+      <input type="range" class="tile__brightness"
+             min="1" max="255"
+             value="${entityStates[tile.entity_id]?.attributes?.brightness ?? 255}"
+             data-entity-id="${safeEid}" />
+    ` : "";
+
     return `
+      <button class="tile__edit" data-tile-id="${safeId}" title="Edit tile">
+        <i class="mdi mdi-pencil"></i>
+      </button>
       <button class="tile__remove" data-tile-id="${safeId}" title="Remove tile">
         <i class="mdi mdi-close"></i>
       </button>
       <i class="mdi ${safeIcon} tile__icon"></i>
       <span class="tile__label">${safeLabel}</span>
+      ${sliderHTML}
     `;
   }
 
-  /** Set the on/off class on a grid-stack-item element. */
   function applyTileState(el, entityId) {
     const on = isOn(entityId);
     el.classList.toggle("tile--on", on);
@@ -134,28 +147,58 @@ const DashboardApp = (() => {
 
   // ── Grid / tile management ─────────────────────────────────────────
 
-  /** Serialize the current grid to a Layout object. */
   function serializeLayout() {
     const tiles = [];
     for (const el of document.querySelectorAll(".grid-stack-item")) {
       const d = el.dataset;
-      tiles.push({
+      const tileType = d.tileType || "entity";
+      const base = {
         id:        d.tileId,
-        entity_id: d.entityId,
-        label:     d.label,
-        icon:      d.icon,
-        domain:    d.domain,
+        tile_type: tileType,
         x: parseInt(el.getAttribute("gs-x")) || 0,
         y: parseInt(el.getAttribute("gs-y")) || 0,
         w: parseInt(el.getAttribute("gs-w")) || 2,
         h: parseInt(el.getAttribute("gs-h")) || 2,
-      });
+      };
+
+      if (tileType === "weather") {
+        tiles.push({
+          ...base,
+          label:        d.label,
+          zip_code:     d.zipCode,
+          country_code: d.countryCode,
+          unit:         d.unit,
+        });
+      } else if (tileType === "scene") {
+        tiles.push({
+          ...base,
+          label:   d.label,
+          icon:    d.icon,
+          members: JSON.parse(d.members || "[]"),
+        });
+      } else {
+        tiles.push({
+          ...base,
+          entity_id: d.entityId,
+          label:     d.label,
+          icon:      d.icon,
+          domain:    d.domain,
+        });
+      }
     }
     return { columns: 12, tiles };
   }
 
-  /** Add a single tile to the grid. */
   function addTileToGrid(tile) {
+    if (tile.tile_type === "weather") {
+      WeatherTiles.addWeatherTileToGrid(tile, grid);
+      return;
+    }
+    if (tile.tile_type === "scene") {
+      SceneTiles.addSceneTileToGrid(tile, grid, entityStates);
+      return;
+    }
+
     const on = isOn(tile.entity_id);
     const el = document.createElement("div");
     el.className = on ? "tile--on" : "tile--off";
@@ -173,7 +216,6 @@ const DashboardApp = (() => {
     grid.addWidget(el, { x: tile.x, y: tile.y, w: tile.w, h: tile.h });
   }
 
-  /** Rebuild the entire grid from a Layout. */
   function renderLayout(layout) {
     grid.removeAll(false);
     for (const tile of layout.tiles) {
@@ -184,10 +226,24 @@ const DashboardApp = (() => {
     }
   }
 
-  /** Refresh on/off state on every tile without rebuilding the grid. */
   function refreshTileStates() {
     for (const el of document.querySelectorAll(".grid-stack-item")) {
+      const type = el.dataset.tileType || "entity";
+      if (type === "weather") continue;
+      if (type === "scene") {
+        // Skip poll-driven refresh during cooldown to avoid overwriting optimistic state
+        if (!SceneTiles.isInCooldown()) {
+          SceneTiles.updateSceneState(el, entityStates);
+        }
+        continue;
+      }
+      // Entity tile — update on/off class and brightness slider
       applyTileState(el, el.dataset.entityId);
+      const slider = el.querySelector(".tile__brightness");
+      if (slider) {
+        const brightness = entityStates[el.dataset.entityId]?.attributes?.brightness;
+        if (brightness !== undefined) slider.value = brightness;
+      }
     }
   }
 
@@ -208,7 +264,6 @@ const DashboardApp = (() => {
     btnEdit.classList.remove("fab--hidden");
     grid.setStatic(true);
 
-    // Persist layout
     try {
       await saveLayout(serializeLayout());
     } catch (err) {
@@ -216,10 +271,10 @@ const DashboardApp = (() => {
     }
   }
 
-  // ── Tile click handling ────────────────────────────────────────────
+  // ── Tile click / brightness handling ──────────────────────────────
 
   function handleTileClick(e) {
-    // In edit mode, don't toggle — unless they clicked the remove button
+    // Remove button works in both modes
     const removeBtn = e.target.closest(".tile__remove");
     if (removeBtn) {
       const tileId = removeBtn.dataset.tileId;
@@ -228,49 +283,148 @@ const DashboardApp = (() => {
       return;
     }
 
+    // Edit button — opens modal in edit mode
+    const editBtn = e.target.closest(".tile__edit");
+    if (editBtn) {
+      const tileId = editBtn.dataset.tileId;
+      const item = document.querySelector(`.grid-stack-item[data-tile-id="${tileId}"]`);
+      if (item) openEditModal(item);
+      return;
+    }
+
+    // Brightness slider — handle separately, don't toggle
+    if (e.target.classList.contains("tile__brightness")) return;
+
     if (editing) return;
 
     const item = e.target.closest(".grid-stack-item");
     if (!item) return;
 
+    const type = item.dataset.tileType || "entity";
+
+    if (type === "weather") return;   // display-only
+
+    if (type === "scene") {
+      SceneTiles.handleSceneToggle(item, entityStates);
+      return;
+    }
+
+    // Entity tile toggle
     const entityId = item.dataset.entityId;
     if (!entityId) return;
 
-    // Optimistic UI update
     const wasOn = isOn(entityId);
-    if (entityStates[entityId]) {
-      entityStates[entityId].state = wasOn ? "off" : "on";
-    }
+    if (entityStates[entityId]) entityStates[entityId].state = wasOn ? "off" : "on";
     applyTileState(item, entityId);
 
-    // Fire the toggle, revert on failure
     toggleEntity(entityId).catch((err) => {
       console.error("Toggle failed:", err);
-      if (entityStates[entityId]) {
-        entityStates[entityId].state = wasOn ? "on" : "off";
-      }
+      if (entityStates[entityId]) entityStates[entityId].state = wasOn ? "on" : "off";
       applyTileState(item, entityId);
     });
   }
 
+  /** Debounced brightness slider handler — only fires when the light is already on. */
+  function handleBrightnessInput(e) {
+    if (!e.target.classList.contains("tile__brightness")) return;
+
+    const entityId = e.target.dataset.entityId;
+
+    // Don't touch a light that is off — slider is hidden via CSS but guard here too
+    if (!entityStates[entityId] || entityStates[entityId].state !== "on") return;
+
+    const brightness = parseInt(e.target.value, 10);
+    clearTimeout(brightnessTimer);
+    brightnessTimer = setTimeout(() => {
+      api("POST", `/api/ha/services/light/turn_on`, {
+        entity_id: entityId,
+        extra: { brightness },
+      }).catch((err) => console.error("Brightness set failed:", err));
+    }, 150);
+  }
+
   // ── Add-tile modal ─────────────────────────────────────────────────
 
+  function activateTab(tabName) {
+    const tabs = document.querySelectorAll(".modal__tab");
+    tabs.forEach((t) => t.classList.toggle("modal__tab--active", t.dataset.tab === tabName));
+    document.getElementById("entity-form-section").classList.toggle("section--hidden", tabName !== "entity");
+    document.getElementById("scene-form-section").classList.toggle("section--hidden", tabName !== "scene");
+    document.getElementById("weather-form-section").classList.toggle("section--hidden", tabName !== "weather");
+  }
+
   function openAddModal() {
+    activateTab("entity");
     modal.classList.remove("modal--hidden");
     populateEntitySelect();
+  }
+
+  function openEditModal(tileEl) {
+    editingTileEl = tileEl;
+    const type = tileEl.dataset.tileType || "entity";
+
+    // Hide tab bar and change heading
+    document.querySelector(".modal__tabs").style.display = "none";
+    document.querySelector(".modal__content h2").textContent = "Edit Tile";
+
+    if (type === "entity") {
+      activateTab("entity");
+      populateEntityForEdit(tileEl);
+      // Change submit button text
+      addForm.querySelector("button[type='submit']").textContent = "Save";
+    } else if (type === "scene") {
+      activateTab("scene");
+      SceneTiles.populateForEdit(tileEl);
+      document.getElementById("btn-scene-confirm").textContent = "Save";
+    } else if (type === "weather") {
+      activateTab("weather");
+      populateWeatherForEdit(tileEl);
+      document.querySelector("#add-weather-form button[type='submit']").textContent = "Save";
+    }
+
+    modal.classList.remove("modal--hidden");
+  }
+
+  function populateEntityForEdit(tileEl) {
+    populateEntitySelect();
+    const select    = $("#tile-entity");
+    const labelInput = $("#tile-label");
+    const iconInput  = $("#tile-icon");
+
+    select.value = tileEl.dataset.entityId;
+    labelInput.value = tileEl.dataset.label;
+    labelInput.dataset.autoFilled = "false";
+    iconInput.value = tileEl.dataset.icon;
+  }
+
+  function populateWeatherForEdit(tileEl) {
+    document.getElementById("weather-label").value   = tileEl.dataset.label || "";
+    document.getElementById("weather-zip").value     = tileEl.dataset.zipCode || "";
+    document.getElementById("weather-country").value = tileEl.dataset.countryCode || "US";
+    document.getElementById("weather-unit").value    = tileEl.dataset.unit || "fahrenheit";
   }
 
   function closeAddModal() {
     modal.classList.add("modal--hidden");
     addForm.reset();
+    SceneTiles.resetModal();
+    const wForm = document.getElementById("add-weather-form");
+    if (wForm) wForm.reset();
+
+    // Restore modal to add mode
+    editingTileEl = null;
+    document.querySelector(".modal__tabs").style.display = "";
+    document.querySelector(".modal__content h2").textContent = "Add Tile";
+    addForm.querySelector("button[type='submit']").textContent = "Add";
+    document.getElementById("btn-scene-confirm").textContent = "Confirm";
+    const weatherSubmit = document.querySelector("#add-weather-form button[type='submit']");
+    if (weatherSubmit) weatherSubmit.textContent = "Add";
   }
 
   function populateEntitySelect() {
     const select = $("#tile-entity");
-    // Remove old listener before re-adding to prevent duplicates
     select.removeEventListener("change", updateAddFormDefaults);
 
-    // Filter to controllable domains
     const domains = new Set(["light", "switch", "fan", "cover", "lock", "climate", "media_player"]);
     const entities = Object.keys(entityStates)
       .filter((id) => domains.has(id.split(".")[0]))
@@ -288,7 +442,6 @@ const DashboardApp = (() => {
       select.appendChild(opt);
     }
 
-    // Auto-fill label & icon from first selection
     updateAddFormDefaults();
     select.addEventListener("change", updateAddFormDefaults);
   }
@@ -314,8 +467,30 @@ const DashboardApp = (() => {
 
     if (!entityId || !label) return;
 
+    if (editingTileEl) {
+      // Update tile in-place
+      editingTileEl.dataset.entityId = entityId;
+      editingTileEl.dataset.label    = label;
+      editingTileEl.dataset.icon     = icon;
+      editingTileEl.dataset.domain   = domainOf(entityId);
+
+      const tile = {
+        id:        editingTileEl.dataset.tileId,
+        entity_id: entityId,
+        label,
+        icon,
+        domain:    domainOf(entityId),
+      };
+      const content = editingTileEl.querySelector(".grid-stack-item-content");
+      content.innerHTML = tileInnerHTML(tile);
+      applyTileState(editingTileEl, entityId);
+      closeAddModal();
+      return;
+    }
+
     const tile = {
       id:        uid(),
+      tile_type: "entity",
       entity_id: entityId,
       label,
       icon,
@@ -347,7 +522,6 @@ const DashboardApp = (() => {
   // ── Initialisation ─────────────────────────────────────────────────
 
   async function init() {
-    // Init GridStack
     grid = GridStack.init({
       column: 12,
       cellHeight: 100,
@@ -356,28 +530,28 @@ const DashboardApp = (() => {
       float: false,
       disableOneColumnMode: true,
       removable: false,
-      staticGrid: true, // start locked; edit mode unlocks via setStatic()
+      staticGrid: true,
     });
 
-    // Event: tile click / remove
     dashboard.addEventListener("click", handleTileClick);
+    dashboard.addEventListener("input", handleBrightnessInput);
 
-    // Event: edit mode
     btnEdit.addEventListener("click", enterEditMode);
     btnDone.addEventListener("click", exitEditMode);
 
-    // Event: add-tile modal
     btnAddTile.addEventListener("click", openAddModal);
     $("#btn-cancel-tile").addEventListener("click", closeAddModal);
     $(".modal__backdrop").addEventListener("click", closeAddModal);
     addForm.addEventListener("submit", handleAddTileSubmit);
 
-    // Clear auto-fill flag on manual label edit
     $("#tile-label").addEventListener("input", function () {
       this.dataset.autoFilled = "false";
     });
 
-    // Load initial state
+    // Wire scene and weather modules; scene needs a live reference to entityStates
+    SceneTiles.initModal(() => entityStates);
+    WeatherTiles.initModal();
+
     try {
       setStatus("connecting");
       await fetchStates();
@@ -387,7 +561,6 @@ const DashboardApp = (() => {
       setStatus("error");
     }
 
-    // Load layout and render
     try {
       const layout = await loadLayout();
       if (layout.tiles.length > 0) {
@@ -397,13 +570,12 @@ const DashboardApp = (() => {
       console.error("Failed to load layout:", err);
     }
 
-    // Start periodic state refresh (initial fetch already done above)
     startPolling();
+    WeatherTiles.startRefreshTimer();
   }
 
-  // ── Public API (for debugging in console) ──────────────────────────
-  return { init };
+  // ── Public API ──────────────────────────────────────────────────────
+  return { init, getGrid: () => grid, closeAddModal, openEditModal, getEditingTile: () => editingTileEl };
 })();
 
-// Boot
 document.addEventListener("DOMContentLoaded", DashboardApp.init);
