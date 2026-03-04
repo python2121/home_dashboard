@@ -18,6 +18,8 @@ const DashboardApp = (() => {
   let pollTimer = null;
   let brightnessTimer = null;
   let editingTileEl = null;   // null = add mode, DOM element = edit mode
+  let entityIconPicker = null;
+  let sceneIconPicker = null;
   const POLL_INTERVAL = 5000; // ms
 
   // ── DOM refs ───────────────────────────────────────────────────────
@@ -30,6 +32,82 @@ const DashboardApp = (() => {
   const modal      = $("#add-tile-modal");
   const addForm    = $("#add-tile-form");
   const statusDot  = $("#status-indicator");
+
+  // ── Icon picker ───────────────────────────────────────────────────
+
+  const ICON_LIST = [
+    // Lightbulbs
+    "mdi-lightbulb", "mdi-lightbulb-outline", "mdi-lightbulb-on",
+    "mdi-lightbulb-on-outline", "mdi-lightbulb-off", "mdi-lightbulb-off-outline",
+    "mdi-lightbulb-group", "mdi-lightbulb-group-outline",
+    "mdi-lightbulb-spot", "mdi-lightbulb-cfl-spiral",
+    "mdi-lightbulb-fluorescent-tube", "mdi-lightbulb-fluorescent-tube-outline",
+    "mdi-lightbulb-night", "mdi-lightbulb-night-outline",
+    "mdi-lightbulb-variant", "mdi-lightbulb-variant-outline",
+    "mdi-home-lightbulb", "mdi-home-lightbulb-outline",
+    // Lamps
+    "mdi-lamp", "mdi-lamp-outline", "mdi-lamps", "mdi-lamps-outline",
+    "mdi-floor-lamp", "mdi-floor-lamp-outline",
+    "mdi-floor-lamp-dual", "mdi-floor-lamp-dual-outline",
+    "mdi-floor-lamp-torchiere", "mdi-floor-lamp-torchiere-variant",
+    "mdi-desk-lamp", "mdi-desk-lamp-on",
+    "mdi-ceiling-light", "mdi-ceiling-light-outline",
+    "mdi-ceiling-light-multiple", "mdi-ceiling-light-multiple-outline",
+    "mdi-chandelier", "mdi-wall-sconce", "mdi-wall-sconce-flat",
+    "mdi-wall-sconce-round", "mdi-vanity-light", "mdi-lava-lamp",
+    // LED / strip / specialty
+    "mdi-led-strip", "mdi-led-strip-variant",
+    "mdi-string-lights", "mdi-string-lights-off",
+    "mdi-track-light", "mdi-track-light-off",
+    "mdi-spotlight", "mdi-spotlight-beam",
+    "mdi-light-recessed", "mdi-light-flood-down", "mdi-light-flood-up",
+    "mdi-outdoor-lamp", "mdi-coach-lamp", "mdi-post-lamp",
+    // Switches / plugs
+    "mdi-light-switch", "mdi-light-switch-off",
+    "mdi-toggle-switch", "mdi-toggle-switch-off",
+    "mdi-toggle-switch-outline", "mdi-toggle-switch-off-outline",
+    "mdi-power-plug", "mdi-power-plug-outline",
+    "mdi-power-plug-off", "mdi-power-plug-off-outline",
+    "mdi-power-socket-us",
+    // Fans
+    "mdi-fan", "mdi-fan-off",
+    "mdi-fan-speed-1", "mdi-fan-speed-2", "mdi-fan-speed-3",
+    "mdi-ceiling-fan", "mdi-ceiling-fan-light",
+    "mdi-air-purifier", "mdi-air-filter",
+    // General home
+    "mdi-home", "mdi-home-outline",
+    "mdi-home-variant", "mdi-home-variant-outline",
+    "mdi-door", "mdi-door-open", "mdi-door-closed",
+    "mdi-garage", "mdi-garage-open",
+    "mdi-sofa", "mdi-bed", "mdi-shower", "mdi-television",
+  ];
+
+  function initIconPicker(inputEl, pickerEl) {
+    function render(filter) {
+      const q = (filter || "").toLowerCase();
+      pickerEl.innerHTML = "";
+      for (const icon of ICON_LIST) {
+        if (q && !icon.includes(q)) continue;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "icon-picker__item";
+        if (inputEl.value === icon) btn.classList.add("icon-picker__item--selected");
+        const label = icon.replace("mdi-", "").replace(/-/g, " ");
+        btn.innerHTML = `<i class="mdi ${escapeHTML(icon)}"></i>${escapeHTML(label)}`;
+        btn.addEventListener("click", () => {
+          inputEl.value = icon;
+          pickerEl.querySelectorAll(".icon-picker__item--selected")
+            .forEach((el) => el.classList.remove("icon-picker__item--selected"));
+          btn.classList.add("icon-picker__item--selected");
+        });
+        pickerEl.appendChild(btn);
+      }
+    }
+
+    inputEl.addEventListener("input", () => render(inputEl.value));
+    render("");
+    return { refresh: () => render("") };
+  }
 
   // ── Helpers ────────────────────────────────────────────────────────
 
@@ -354,6 +432,7 @@ const DashboardApp = (() => {
     activateTab("entity");
     modal.classList.remove("modal--hidden");
     populateEntitySelect();
+    if (entityIconPicker) entityIconPicker.refresh();
   }
 
   function openEditModal(tileEl) {
@@ -367,11 +446,13 @@ const DashboardApp = (() => {
     if (type === "entity") {
       activateTab("entity");
       populateEntityForEdit(tileEl);
+      if (entityIconPicker) entityIconPicker.refresh();
       // Change submit button text
       addForm.querySelector("button[type='submit']").textContent = "Save";
     } else if (type === "scene") {
       activateTab("scene");
       SceneTiles.populateForEdit(tileEl);
+      if (sceneIconPicker) sceneIconPicker.refresh();
       document.getElementById("btn-scene-confirm").textContent = "Save";
     } else if (type === "weather") {
       activateTab("weather");
@@ -454,6 +535,7 @@ const DashboardApp = (() => {
       labelInput.dataset.autoFilled = "true";
     }
     iconInput.value = defaultIcon(entityId);
+    if (entityIconPicker) entityIconPicker.refresh();
   }
 
   function handleAddTileSubmit(e) {
@@ -544,6 +626,10 @@ const DashboardApp = (() => {
     $("#tile-label").addEventListener("input", function () {
       this.dataset.autoFilled = "false";
     });
+
+    // Icon pickers
+    entityIconPicker = initIconPicker($("#tile-icon"), $("#entity-icon-picker"));
+    sceneIconPicker = initIconPicker($("#scene-icon"), $("#scene-icon-picker"));
 
     // Wire scene and weather modules; scene needs a live reference to entityStates
     SceneTiles.initModal(() => entityStates);
