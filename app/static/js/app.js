@@ -15,6 +15,7 @@ const DashboardApp = (() => {
   let grid = null;
   let editing = false;
   let entityStates = {};      // entity_id → {state, attributes, …}
+  const pendingToggles = new Set(); // entity_ids with in-flight toggle calls
   let pollTimer = null;
   let brightnessTimer = null;
   let editingTileEl = null;   // null = add mode, DOM element = edit mode
@@ -309,14 +310,18 @@ const DashboardApp = (() => {
       const type = el.dataset.tileType || "entity";
       if (type === "weather") continue;
       if (type === "scene") {
-        SceneTiles.updateSceneState(el, entityStates);
+        if (!SceneTiles.isPending(el.dataset.tileId)) {
+          SceneTiles.updateSceneState(el, entityStates);
+        }
         continue;
       }
-      // Entity tile — update on/off class and brightness slider
-      applyTileState(el, el.dataset.entityId);
+      // Entity tile — skip if toggle is in flight
+      const entityId = el.dataset.entityId;
+      if (pendingToggles.has(entityId)) continue;
+      applyTileState(el, entityId);
       const slider = el.querySelector(".tile__brightness");
       if (slider) {
-        const brightness = entityStates[el.dataset.entityId]?.attributes?.brightness;
+        const brightness = entityStates[entityId]?.attributes?.brightness;
         if (brightness !== undefined) slider.value = brightness;
       }
     }
@@ -392,11 +397,14 @@ const DashboardApp = (() => {
     if (entityStates[entityId]) entityStates[entityId].state = wasOn ? "off" : "on";
     applyTileState(item, entityId);
 
-    toggleEntity(entityId).catch((err) => {
-      console.error("Toggle failed:", err);
-      if (entityStates[entityId]) entityStates[entityId].state = wasOn ? "on" : "off";
-      applyTileState(item, entityId);
-    });
+    pendingToggles.add(entityId);
+    toggleEntity(entityId)
+      .catch((err) => {
+        console.error("Toggle failed:", err);
+        if (entityStates[entityId]) entityStates[entityId].state = wasOn ? "on" : "off";
+        applyTileState(item, entityId);
+      })
+      .finally(() => pendingToggles.delete(entityId));
   }
 
   /** Debounced brightness slider handler — only fires when the light is already on. */

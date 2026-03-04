@@ -14,6 +14,9 @@ const SceneTiles = (() => {
   // Absent key = no tracked state yet (initial load uses HA fallback).
   const _sceneStates = {};
 
+  // Tile IDs with an in-flight scene-toggle API call
+  const _pendingScenes = new Set();
+
   // ── Helpers ──────────────────────────────────────────────────────────
 
   function escapeHTML(str) {
@@ -67,6 +70,23 @@ const SceneTiles = (() => {
    * 2. Otherwise (initial page load), fall back to checking whether
    *    all member lights are on in HA.
    */
+  /**
+   * Returns true if all member lights are on AND each is within BRIGHTNESS_TOLERANCE
+   * of its saved scene brightness.  Non-dimmable lights (no brightness attribute)
+   * are treated as matching if they are on.
+   */
+  const BRIGHTNESS_TOLERANCE = 15; // out of 255
+
+  function membersMatchScene(members, entityStates) {
+    return members.every((m) => {
+      const state = entityStates[m.entity_id];
+      if (!state || state.state !== "on") return false;
+      const ha = state.attributes?.brightness;
+      if (ha === undefined) return true; // non-dimmable — matching if it's on
+      return Math.abs(ha - m.brightness) <= BRIGHTNESS_TOLERANCE;
+    });
+  }
+
   function isSceneOn(el, entityStates) {
     const tileId  = el.dataset.tileId;
     const members = JSON.parse(el.dataset.members || "[]");
@@ -77,16 +97,22 @@ const SceneTiles = (() => {
     );
 
     if (tileId in _sceneStates) {
-      // Tracked "on" but HA shows lights are off → external change, clear tracking
+      // Tracked "on" but HA says lights are off → externally turned off
       if (_sceneStates[tileId] && !allMembersOn) {
         delete _sceneStates[tileId];
         return false;
       }
+      // Tracked "off" but HA says lights match this scene's brightness exactly
+      // → externally restored to this scene (not just another scene's lights passing through)
+      if (!_sceneStates[tileId] && membersMatchScene(members, entityStates)) {
+        delete _sceneStates[tileId];
+        return true;
+      }
       return _sceneStates[tileId];
     }
 
-    // No tracked state — best-effort from HA (e.g. fresh page load)
-    return allMembersOn;
+    // No tracked state (fresh page load) — require on/off AND brightness match
+    return membersMatchScene(members, entityStates);
   }
 
   function updateSceneState(el, entityStates) {
@@ -105,6 +131,7 @@ const SceneTiles = (() => {
 
     // ── Track state explicitly ──
     _sceneStates[tileId] = !wasOn;
+    _pendingScenes.add(tileId);
 
     // If turning on, mark overlapping scenes as off
     if (action === "on") {
@@ -150,15 +177,15 @@ const SceneTiles = (() => {
           }
         });
       }
+    } finally {
+      _pendingScenes.delete(tileId);
     }
   }
 
   // ── Tile creation ────────────────────────────────────────────────────
 
   function addSceneTileToGrid(tile, grid, entityStates) {
-    const on = tile.members.length > 0 && tile.members.every(
-      (m) => entityStates[m.entity_id]?.state === "on"
-    );
+    const on = tile.members.length > 0 && membersMatchScene(tile.members, entityStates);
 
     const el = document.createElement("div");
     el.className = on ? "tile--on" : "tile--off";
@@ -398,5 +425,5 @@ const SceneTiles = (() => {
   }
 
   // ── Public API ───────────────────────────────────────────────────────
-  return { addSceneTileToGrid, updateSceneState, handleSceneToggle, initModal, resetModal, populateForEdit };
+  return { addSceneTileToGrid, updateSceneState, handleSceneToggle, initModal, resetModal, populateForEdit, isPending: (tileId) => _pendingScenes.has(tileId) };
 })();
