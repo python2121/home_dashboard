@@ -6,9 +6,12 @@ A self-hosted, touch-friendly web dashboard for [Home Assistant](https://www.hom
 - Resizable, repositionable tiles that snap to a 12-column grid
 - Edit mode with drag-and-drop layout customization (locked in normal use)
 - Tile contents (icon, label) scale with tile size
-- Supports lights, switches, fans, covers, locks, climate, and media players
+- **Entity tiles** — toggle lights, switches, fans, covers, locks, climate, and media players; brightness slider for dimmable lights
+- **Scene tiles** — control a group of lights, each at its own brightness, with a two-step builder and live HA preview
+- **Weather tiles** — current conditions + 3-day forecast via Open-Meteo (no API key required)
 - Tile layout persists across restarts
 - 5-second state polling with optimistic UI on toggle
+- Scene state is determined by brightness matching — only the scene whose targets match the actual light brightness shows as active
 - Runs fully self-hosted — no cloud, no external dependencies beyond CDNs for icons and GridStack
 
 ---
@@ -102,7 +105,6 @@ The recommended way to run the dashboard on your home server.
 ### First-time build and start
 
 ```bash
-# Build the image and start the container in the background
 docker compose up -d --build
 ```
 
@@ -153,7 +155,9 @@ ports:
 
 ### Normal mode
 
-- **Tap a tile** to toggle the entity on/off
+- **Tap an entity tile** to toggle the entity on/off
+- **Drag the brightness slider** (bottom of a light tile) to dim — only visible when the light is on
+- **Tap a scene tile** to activate that lighting scene (turns all member lights to their saved brightness). Tapping an active scene turns it off.
 - The small colored dot in the top-right corner shows Home Assistant connectivity:
   - 🟠 Orange — connecting
   - 🟢 Green — connected and polling
@@ -164,16 +168,27 @@ ports:
 - Tap the **pencil FAB** (bottom-right) to enter edit mode
 - **Drag tiles** to reposition them on the grid
 - **Resize tiles** by dragging the resize handle (bottom-right corner of each tile)
-- Tap **Add Tile** to add a new tile — choose an entity from your Home Assistant, set a label and icon
+- Tap the **pencil button** on a tile to edit its settings (entity, label, icon, scene members, etc.)
 - Tap the **✕** on a tile to remove it
+- Tap **Add Tile** to open the tile builder with three tabs:
+  - **Entity** — pick a HA entity, label, and icon
+  - **Scene** — two-step builder: pick lights, then drag per-light brightness sliders with live HA preview
+  - **Weather** — enter a ZIP code and temperature unit
 - Tap **Done** to save the layout and exit edit mode
 
 ### Icons
 
-Icons use [Material Design Icons](https://pictogrammers.com/library/mdi/). To find an icon name:
-1. Visit the MDI icon library and search for what you want
-2. Copy the icon name (e.g. `mdi-ceiling-fan`, `mdi-floor-lamp`)
-3. Paste it in the icon field when adding a tile
+Icons use [Material Design Icons](https://pictogrammers.com/library/mdi/). When adding or editing a tile, an icon picker is shown below the icon field — click any icon to select it, or type in the field to filter. Icon names follow the pattern `mdi-ceiling-fan`, `mdi-floor-lamp`, etc.
+
+### Scenes
+
+A scene tile controls a group of `light.*` entities, each at its own target brightness (1–255). On each state poll, the dashboard checks whether the actual HA brightness of every member light is within ±15 of its saved target. Only the scene whose targets match the current state shows as active — so if your lights are at "TV Time" brightness, only that scene highlights, not "Full Brightness".
+
+Tapping a scene tile:
+- **Off → On**: sets each member light to its saved brightness concurrently
+- **On → Off**: turns all member lights off
+
+Activating one scene automatically marks any overlapping scene as inactive in the UI.
 
 ---
 
@@ -184,15 +199,19 @@ home_dashboard/
 ├── app/
 │   ├── main.py              # FastAPI entrypoint
 │   ├── config.py            # Settings (loaded from .env)
-│   ├── models.py            # Pydantic models
+│   ├── models.py            # Pydantic models: EntityTile, SceneTile, WeatherTile, Layout
 │   ├── routers/
-│   │   ├── ha_proxy.py      # Proxies requests to Home Assistant
-│   │   └── layout.py        # Saves/loads tile layout
+│   │   ├── ha_proxy.py      # Proxies requests to Home Assistant (/api/ha/*)
+│   │   ├── layout.py        # Saves/loads tile layout (/api/layout)
+│   │   └── weather.py       # Weather data via Open-Meteo + Nominatim (/api/weather)
 │   ├── static/
 │   │   ├── css/style.css    # Dark kiosk theme
-│   │   └── js/app.js        # Frontend logic
+│   │   └── js/
+│   │       ├── app.js       # Grid, edit mode, entity tiles, state polling
+│   │       ├── scene.js     # Scene tile module (state matching, builder, toggle)
+│   │       └── weather.js   # Weather tile module (rendering, refresh timer)
 │   └── templates/
-│       └── index.html       # Main page
+│       └── index.html       # Main page (Jinja2 shell)
 ├── tests/                   # Pytest test suite
 ├── data/                    # Layout JSON — auto-created, gitignored
 ├── .env.example             # Config template (commit this)
@@ -201,6 +220,25 @@ home_dashboard/
 ├── docker-compose.yml
 └── pyproject.toml
 ```
+
+---
+
+## API Overview
+
+The FastAPI backend exposes these routes (all JSON):
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/ha/states` | All HA entity states |
+| `GET` | `/api/ha/states/{entity_id}` | Single entity state |
+| `POST` | `/api/ha/toggle/{entity_id}` | Toggle an entity on/off |
+| `POST` | `/api/ha/services/{domain}/{service}` | Call any HA service (e.g. `light/turn_on`) |
+| `POST` | `/api/ha/scene-toggle` | Turn a group of lights on/off with per-light brightness |
+| `GET` | `/api/layout` | Fetch the saved tile layout |
+| `PUT` | `/api/layout` | Save the tile layout |
+| `GET` | `/api/weather` | Current + 3-day forecast for a ZIP code |
+
+Enable `DEBUG=true` in `.env` to expose Swagger UI at `/docs`.
 
 ---
 
@@ -228,5 +266,12 @@ home_dashboard/
 - In Docker, ensure the `dashboard-data` volume exists: `docker volume ls | grep dashboard`
 - In local dev, check that `data/layout.json` exists and is valid JSON
 
+**Scene tiles all show as active on load**
+- This was a known bug where scenes only checked whether lights were on, not their brightness. It is fixed — if you still see it, do a hard refresh (`Cmd+Shift+R` / `Ctrl+Shift+R`) to clear the browser's JS cache.
+
 **Edit mode — tiles not draggable**
 - Make sure you tapped the pencil FAB to enter edit mode first. The grid is locked in normal mode.
+
+**Weather tile shows "Failed to load"**
+- Check that your server has internet access (Open-Meteo and Nominatim are external services)
+- Verify the ZIP code and country code are valid
