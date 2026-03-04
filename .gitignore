@@ -17,9 +17,6 @@ dist/
 # Data (layout persistence)
 data/
 
-# Docker
-.docker/
-
 # OS
 .DS_Store
 Thumbs.db
