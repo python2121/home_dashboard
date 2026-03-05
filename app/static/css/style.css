@@ -723,7 +723,7 @@ html, body {
   .weather-desc { display: none; }
 }
 
-@container weather (max-width: 220px) {
+@container weather (max-width: 130px) {
   .weather-forecast { display: none; }
   .weather-icon { font-size: 2.2rem; }
   .weather-temp { font-size: 1.5rem; }
