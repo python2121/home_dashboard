@@ -96,14 +96,14 @@ async def _geocode(zip_code: str, country_code: str) -> Tuple[float, float]:
 
 
 async def _fetch_weather(lat: float, lon: float, unit: str) -> Dict[str, Any]:
-    """Fetch current conditions and 4-day forecast from Open-Meteo."""
+    """Fetch current conditions and 6-day forecast from Open-Meteo."""
     params = {
         "latitude": lat,
         "longitude": lon,
         "current": "temperature_2m,weather_code",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min",
         "temperature_unit": unit,
-        "forecast_days": 4,
+        "forecast_days": 6,
         "timezone": "auto",
     }
     try:
@@ -129,7 +129,7 @@ def _build_response(raw: Dict[str, Any], unit: str) -> Dict[str, Any]:
     unit_symbol = "\u00b0F" if unit == "fahrenheit" else "\u00b0C"
 
     forecast: List[Dict[str, Any]] = []
-    for i in range(1, 4):  # indices 1, 2, 3 → tomorrow + next 2 days
+    for i in range(1, 6):  # indices 1–5 → tomorrow + next 4 days (5-day forecast)
         code = int(daily["weather_code"][i])
         desc, icon = _wmo_info(code)
         forecast.append(
@@ -183,7 +183,7 @@ async def _fetch_open_meteo_chart(lat: float, lon: float, unit: str) -> Dict[str
         "hourly": "temperature_2m",
         "daily": "sunrise,sunset",
         "temperature_unit": unit,
-        "forecast_days": 1,
+        "forecast_days": 2,
         "timezone": "auto",
     }
     try:
@@ -214,7 +214,7 @@ def _build_chart_response(
         ]
         return {"mode": "rain", "bars": bars}
 
-    # Temp mode — pick the next 6 hours starting from now
+    # Temp mode — pick the next 12 hours starting from now
     unit_symbol = "\u00b0F" if unit == "fahrenheit" else "\u00b0C"
     hourly_times: List[str] = meteo_raw["hourly"]["time"]
     hourly_temps: List[float] = meteo_raw["hourly"]["temperature_2m"]
@@ -226,8 +226,8 @@ def _build_chart_response(
     )
     now_str = now_local.strftime("%Y-%m-%dT%H:00")
 
-    # Default to last 6 available hours if all entries are in the past
-    start_idx = max(0, len(hourly_times) - 6)
+    # Default to last 12 available hours if all entries are in the past
+    start_idx = max(0, len(hourly_times) - 12)
     for i, t in enumerate(hourly_times):
         if t >= now_str:
             start_idx = i
@@ -235,7 +235,7 @@ def _build_chart_response(
 
     points = [
         {"iso": hourly_times[j], "temp": round(hourly_temps[j])}
-        for j in range(start_idx, min(start_idx + 6, len(hourly_times)))
+        for j in range(start_idx, min(start_idx + 12, len(hourly_times)))
     ]
 
     sunrise_list: List[str] = daily.get("sunrise") or []

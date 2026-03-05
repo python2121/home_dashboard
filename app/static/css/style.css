@@ -712,7 +712,7 @@ html, body {
 }
 
 .weather-day-hilo {
-  font-size: 0.7rem;
+  font-size: 0.60rem;
   color: var(--text-dim);
   white-space: nowrap;
 }
@@ -727,6 +727,15 @@ html, body {
   .weather-forecast { display: none; }
   .weather-icon { font-size: 2.2rem; }
   .weather-temp { font-size: 1.5rem; }
+}
+
+/* Extra forecast days (4th and 5th) hidden by default; revealed at 4+ columns wide */
+.weather-day--extra {
+  display: none;
+}
+
+@container weather (min-width: 300px) {
+  .weather-day--extra { display: flex; }
 }
 
 /* Larger icons when there's plenty of room */

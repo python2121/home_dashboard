@@ -130,7 +130,7 @@ const ForecastChartTiles = (() => {
   }
 
   /**
-   * 6-hour temperature line chart with sunrise/sunset markers.
+   * 12-hour temperature line chart with sunrise/sunset markers.
    * Points at x = 8, 45, 82, 118, 155, 192; y range 6–31.
    */
   function renderTempChart(canvasEl, data) {
@@ -265,7 +265,9 @@ const ForecastChartTiles = (() => {
     content.innerHTML = buildTileHTML(tile);
     el.appendChild(content);
 
-    grid.addWidget(el, { x: tile.x, y: tile.y, w: tile.w, h: tile.h });
+    el.setAttribute("gs-min-h", "1");
+    el.setAttribute("gs-max-h", "1");
+    grid.addWidget(el, { x: tile.x, y: tile.y, w: tile.w, h: 1, minH: 1, maxH: 1 });
     refreshTile(el);
   }
 

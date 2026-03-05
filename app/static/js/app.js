@@ -251,6 +251,7 @@ const DashboardApp = (() => {
       } else if (tileType === "forecast_chart") {
         tiles.push({
           ...base,
+          h:            1,
           label:        d.label,
           zip_code:     d.zipCode,
           country_code: d.countryCode,
@@ -641,6 +642,7 @@ const DashboardApp = (() => {
       disableOneColumnMode: true,
       removable: false,
       staticGrid: true,
+      minH: 1,
     });
 
     dashboard.addEventListener("click", handleTileClick);

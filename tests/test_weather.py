@@ -19,10 +19,13 @@ _OPEN_METEO_PAYLOAD = {
         "weather_code": 0,
     },
     "daily": {
-        "time": ["2024-06-01", "2024-06-02", "2024-06-03", "2024-06-04"],
-        "weather_code": [0, 2, 61, 3],
-        "temperature_2m_max": [78.1, 75.0, 70.2, 68.0],
-        "temperature_2m_min": [65.3, 62.0, 58.8, 55.0],
+        "time": [
+            "2024-06-01", "2024-06-02", "2024-06-03",
+            "2024-06-04", "2024-06-05", "2024-06-06",
+        ],
+        "weather_code": [0, 2, 61, 3, 0, 80],
+        "temperature_2m_max": [78.1, 75.0, 70.2, 68.0, 72.0, 69.5],
+        "temperature_2m_min": [65.3, 62.0, 58.8, 55.0, 60.0, 57.0],
     },
 }
 
@@ -56,7 +59,7 @@ def test_get_weather_success(mock_geo, mock_fetch, client):
     assert cur["desc"] == "Clear sky"
     assert cur["unit"] == "\u00b0F"
 
-    assert len(data["forecast"]) == 3
+    assert len(data["forecast"]) == 5
     # Tomorrow: weather_code=2 → partly cloudy
     assert data["forecast"][0]["date"] == "2024-06-02"
     assert data["forecast"][0]["icon"] == "mdi-weather-partly-cloudy"

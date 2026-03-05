@@ -84,7 +84,7 @@ def test_temp_mode_when_no_rain(mock_geo, mock_pirate, mock_meteo, client):
     data = resp.json()
     assert data["mode"] == "temp"
     assert "points" in data
-    assert len(data["points"]) == 6
+    assert len(data["points"]) == 12
     assert data["unit"] == "\u00b0F"
     assert "sunrise_iso" in data
     assert "sunset_iso" in data

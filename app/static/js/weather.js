@@ -58,12 +58,14 @@ const WeatherTiles = (() => {
 
     const forecastEl = contentEl.querySelector(".weather-forecast");
     forecastEl.innerHTML = "";
-    for (const day of data.forecast) {
+    for (let idx = 0; idx < data.forecast.length; idx++) {
+      const day = data.forecast[idx];
       // day.date is YYYY-MM-DD; use noon local time to avoid timezone rollback
       const date = new Date(`${day.date}T12:00:00`);
       const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
       const dayEl = document.createElement("div");
-      dayEl.className = "weather-day";
+      // Days 4 and 5 (index ≥ 3) are hidden by default; CSS reveals them at wider widths
+      dayEl.className = idx >= 3 ? "weather-day weather-day--extra" : "weather-day";
       dayEl.innerHTML = `
         <div class="weather-day-date">${escapeHTML(dayName)}</div>
         <i class="mdi ${escapeHTML(day.icon)} weather-day-icon"></i>
