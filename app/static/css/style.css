@@ -729,6 +729,11 @@ html, body {
   .weather-temp { font-size: 1.5rem; }
 }
 
+/* 1×1 tile: both dimensions tiny — shrink temp further so icon + temp fit vertically */
+@container weather (max-width: 130px) and (max-height: 80px) {
+  .weather-temp { font-size: 1.1rem; }
+}
+
 /* Extra forecast days (4th and 5th) hidden by default; revealed at 4+ columns wide */
 .weather-day--extra {
   display: none;
