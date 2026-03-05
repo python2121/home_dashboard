@@ -8,7 +8,8 @@ A self-hosted, touch-friendly web dashboard for [Home Assistant](https://www.hom
 - Tile contents (icon, label) scale with tile size
 - **Entity tiles** — toggle lights, switches, fans, covers, locks, climate, and media players; brightness slider for dimmable lights
 - **Scene tiles** — control a group of lights, each at its own brightness, with a two-step builder and live HA preview
-- **Weather tiles** — current conditions + 3-day forecast via Open-Meteo (no API key required)
+- **Weather tiles** — current conditions + 5-day forecast via Open-Meteo (no API key required)
+- **Forecast chart tiles** — 12-hour temperature line chart, or minute-by-minute rain probability chart (requires Pirate Weather API key)
 - Tile layout persists across restarts
 - 5-second state polling with optimistic UI on toggle
 - Scene state is determined by brightness matching — only the scene whose targets match the actual light brightness shows as active
@@ -54,6 +55,10 @@ Edit `.env`:
 # Home Assistant — replace with your HA server's IP and the token you just generated
 HA_BASE_URL=http://192.168.1.100:8123
 HA_TOKEN=your_long_lived_access_token_here
+
+# Optional — required only for the rain chart mode on forecast chart tiles
+# Get a free key at https://pirateweather.net
+# PIRATE_WEATHER_KEY=your_pirate_weather_key_here
 
 # Optional — set to true to enable /docs (Swagger UI) and verbose logging
 # DEBUG=false
@@ -158,6 +163,7 @@ ports:
 - **Tap an entity tile** to toggle the entity on/off
 - **Drag the brightness slider** (bottom of a light tile) to dim — only visible when the light is on
 - **Tap a scene tile** to activate that lighting scene (turns all member lights to their saved brightness). Tapping an active scene turns it off.
+- **Weather and chart tiles** are display-only — tapping them does nothing
 - The small colored dot in the top-right corner shows Home Assistant connectivity:
   - 🟠 Orange — connecting
   - 🟢 Green — connected and polling
@@ -170,10 +176,11 @@ ports:
 - **Resize tiles** by dragging the resize handle (bottom-right corner of each tile)
 - Tap the **pencil button** on a tile to edit its settings (entity, label, icon, scene members, etc.)
 - Tap the **✕** on a tile to remove it
-- Tap **Add Tile** to open the tile builder with three tabs:
+- Tap **Add Tile** to open the tile builder with four tabs:
   - **Entity** — pick a HA entity, label, and icon
   - **Scene** — two-step builder: pick lights, then drag per-light brightness sliders with live HA preview
   - **Weather** — enter a ZIP code and temperature unit
+  - **Chart** — enter a ZIP code and temperature unit; displays rain or temperature chart depending on conditions
 - Tap **Done** to save the layout and exit edit mode
 
 ### Icons
@@ -190,6 +197,15 @@ Tapping a scene tile:
 
 Activating one scene automatically marks any overlapping scene as inactive in the UI.
 
+### Forecast Chart Tiles
+
+The chart tile is a fixed 1-row-tall strip designed to sit along the top or bottom of your layout.
+
+- **Rain mode** — when any of the next 60 minutes has >10% precipitation probability, shows a 60-bar chart of minute-by-minute rain probability. Requires a `PIRATE_WEATHER_KEY` in `.env`.
+- **Temp mode** — when no rain is imminent (or no Pirate Weather key is configured), shows a 12-hour temperature line chart with sunrise and sunset markers.
+
+The chart automatically picks the appropriate mode on each 5-minute refresh.
+
 ---
 
 ## Project Structure
@@ -199,17 +215,18 @@ home_dashboard/
 ├── app/
 │   ├── main.py              # FastAPI entrypoint
 │   ├── config.py            # Settings (loaded from .env)
-│   ├── models.py            # Pydantic models: EntityTile, SceneTile, WeatherTile, Layout
+│   ├── models.py            # Pydantic models: EntityTile, SceneTile, WeatherTile, ForecastChartTile, Layout
 │   ├── routers/
 │   │   ├── ha_proxy.py      # Proxies requests to Home Assistant (/api/ha/*)
 │   │   ├── layout.py        # Saves/loads tile layout (/api/layout)
-│   │   └── weather.py       # Weather data via Open-Meteo + Nominatim (/api/weather)
+│   │   └── weather.py       # Weather + chart data via Open-Meteo, Nominatim, Pirate Weather (/api/weather)
 │   ├── static/
 │   │   ├── css/style.css    # Dark kiosk theme
 │   │   └── js/
 │   │       ├── app.js       # Grid, edit mode, entity tiles, state polling
 │   │       ├── scene.js     # Scene tile module (state matching, builder, toggle)
-│   │       └── weather.js   # Weather tile module (rendering, refresh timer)
+│   │       ├── weather.js   # Weather tile module (rendering, refresh timer)
+│   │       └── chart.js     # Forecast chart tile module (rain bars, temp line chart)
 │   └── templates/
 │       └── index.html       # Main page (Jinja2 shell)
 ├── tests/                   # Pytest test suite
@@ -236,7 +253,8 @@ The FastAPI backend exposes these routes (all JSON):
 | `POST` | `/api/ha/scene-toggle` | Turn a group of lights on/off with per-light brightness |
 | `GET` | `/api/layout` | Fetch the saved tile layout |
 | `PUT` | `/api/layout` | Save the tile layout |
-| `GET` | `/api/weather` | Current + 3-day forecast for a ZIP code |
+| `GET` | `/api/weather` | Current conditions + 5-day forecast for a ZIP code |
+| `GET` | `/api/weather/chart` | Rain or 12-hour temperature chart for a ZIP code |
 
 Enable `DEBUG=true` in `.env` to expose Swagger UI at `/docs`.
 
@@ -275,3 +293,8 @@ Enable `DEBUG=true` in `.env` to expose Swagger UI at `/docs`.
 **Weather tile shows "Failed to load"**
 - Check that your server has internet access (Open-Meteo and Nominatim are external services)
 - Verify the ZIP code and country code are valid
+
+**Chart tile shows "Failed to load"**
+- If you have a `PIRATE_WEATHER_KEY` set, verify the key is valid at [pirateweather.net](https://pirateweather.net)
+- Without a key the chart falls back to temp mode — check server internet access for Open-Meteo
+- Check logs: `docker compose logs -f` or the uvicorn console output
