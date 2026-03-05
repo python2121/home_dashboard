@@ -248,6 +248,14 @@ const DashboardApp = (() => {
           country_code: d.countryCode,
           unit:         d.unit,
         });
+      } else if (tileType === "forecast_chart") {
+        tiles.push({
+          ...base,
+          label:        d.label,
+          zip_code:     d.zipCode,
+          country_code: d.countryCode,
+          unit:         d.unit,
+        });
       } else if (tileType === "scene") {
         tiles.push({
           ...base,
@@ -271,6 +279,10 @@ const DashboardApp = (() => {
   function addTileToGrid(tile) {
     if (tile.tile_type === "weather") {
       WeatherTiles.addWeatherTileToGrid(tile, grid);
+      return;
+    }
+    if (tile.tile_type === "forecast_chart") {
+      ForecastChartTiles.addForecastChartTileToGrid(tile, grid);
       return;
     }
     if (tile.tile_type === "scene") {
@@ -309,6 +321,7 @@ const DashboardApp = (() => {
     for (const el of document.querySelectorAll(".grid-stack-item")) {
       const type = el.dataset.tileType || "entity";
       if (type === "weather") continue;
+      if (type === "forecast_chart") continue;
       if (type === "scene") {
         if (!SceneTiles.isPending(el.dataset.tileId)) {
           SceneTiles.updateSceneState(el, entityStates);
@@ -382,7 +395,8 @@ const DashboardApp = (() => {
 
     const type = item.dataset.tileType || "entity";
 
-    if (type === "weather") return;   // display-only
+    if (type === "weather") return;         // display-only
+    if (type === "forecast_chart") return;  // display-only
 
     if (type === "scene") {
       SceneTiles.handleSceneToggle(item, entityStates);
@@ -434,6 +448,7 @@ const DashboardApp = (() => {
     document.getElementById("entity-form-section").classList.toggle("section--hidden", tabName !== "entity");
     document.getElementById("scene-form-section").classList.toggle("section--hidden", tabName !== "scene");
     document.getElementById("weather-form-section").classList.toggle("section--hidden", tabName !== "weather");
+    document.getElementById("chart-form-section").classList.toggle("section--hidden", tabName !== "chart");
   }
 
   function openAddModal() {
@@ -466,6 +481,10 @@ const DashboardApp = (() => {
       activateTab("weather");
       populateWeatherForEdit(tileEl);
       document.querySelector("#add-weather-form button[type='submit']").textContent = "Save";
+    } else if (type === "forecast_chart") {
+      activateTab("chart");
+      ForecastChartTiles.populateForEdit(tileEl);
+      document.querySelector("#add-chart-form button[type='submit']").textContent = "Save";
     }
 
     modal.classList.remove("modal--hidden");
@@ -496,6 +515,8 @@ const DashboardApp = (() => {
     SceneTiles.resetModal();
     const wForm = document.getElementById("add-weather-form");
     if (wForm) wForm.reset();
+    const cForm = document.getElementById("add-chart-form");
+    if (cForm) cForm.reset();
 
     // Restore modal to add mode
     editingTileEl = null;
@@ -505,6 +526,8 @@ const DashboardApp = (() => {
     document.getElementById("btn-scene-confirm").textContent = "Confirm";
     const weatherSubmit = document.querySelector("#add-weather-form button[type='submit']");
     if (weatherSubmit) weatherSubmit.textContent = "Add";
+    const chartSubmit = document.querySelector("#add-chart-form button[type='submit']");
+    if (chartSubmit) chartSubmit.textContent = "Add";
   }
 
   function populateEntitySelect() {
@@ -639,9 +662,10 @@ const DashboardApp = (() => {
     entityIconPicker = initIconPicker($("#tile-icon"), $("#entity-icon-picker"));
     sceneIconPicker = initIconPicker($("#scene-icon"), $("#scene-icon-picker"));
 
-    // Wire scene and weather modules; scene needs a live reference to entityStates
+    // Wire scene, weather, and chart modules
     SceneTiles.initModal(() => entityStates);
     WeatherTiles.initModal();
+    ForecastChartTiles.initModal();
 
     try {
       setStatus("connecting");
@@ -663,6 +687,7 @@ const DashboardApp = (() => {
 
     startPolling();
     WeatherTiles.startRefreshTimer();
+    ForecastChartTiles.startRefreshTimer();
   }
 
   // ── Public API ──────────────────────────────────────────────────────

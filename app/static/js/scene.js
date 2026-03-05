@@ -395,6 +395,7 @@ const SceneTiles = (() => {
       entity:  document.getElementById("entity-form-section"),
       scene:   document.getElementById("scene-form-section"),
       weather: document.getElementById("weather-form-section"),
+      chart:   document.getElementById("chart-form-section"),
     };
 
     // Tab switching — owns all three tabs

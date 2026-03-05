@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     ha_base_url: str = "http://localhost:8123"
     ha_token: str = ""
 
+    # Pirate Weather (for forecast chart tile — free key at pirateweather.net)
+    pirate_weather_key: str = ""
+
     # App
     # TODO(auth): add secret_key: str here when implementing session/cookie auth
     debug: bool = False

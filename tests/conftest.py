@@ -8,10 +8,12 @@ import app.routers.weather as _weather_module
 
 @pytest.fixture(autouse=True)
 def _clear_weather_cache():
-    """Reset the in-process weather cache before and after every test."""
+    """Reset the in-process weather and chart caches before and after every test."""
     _weather_module._cache.clear()
+    _weather_module._chart_cache.clear()
     yield
     _weather_module._cache.clear()
+    _weather_module._chart_cache.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +23,7 @@ def _isolate_settings(tmp_path, monkeypatch):
     monkeypatch.setattr("app.config.settings.layout_file", layout_file)
     monkeypatch.setattr("app.config.settings.ha_base_url", "http://ha-test:8123")
     monkeypatch.setattr("app.config.settings.ha_token", "test-token-abc")
+    monkeypatch.setattr("app.config.settings.pirate_weather_key", "test-pirate-key")
 
 
 @pytest.fixture()

@@ -71,8 +71,28 @@ class SceneTile(BaseModel):
         return data
 
 
+class ForecastChartTile(BaseModel):
+    """A dashboard tile showing a rain or temperature chart for a ZIP code."""
+
+    tile_type: Literal["forecast_chart"] = "forecast_chart"
+    id: str = Field(description="Unique tile identifier")
+    label: str = Field(default="Weather Chart", description="Display label shown on the tile")
+    zip_code: str = Field(description="ZIP / postal code")
+    country_code: str = Field(default="US", description="ISO 3166-1 alpha-2 country code")
+    unit: Literal["fahrenheit", "celsius"] = Field(
+        default="fahrenheit", description="Temperature unit"
+    )
+    x: int = Field(default=0, ge=0, description="Grid column position")
+    y: int = Field(default=0, ge=0, description="Grid row position")
+    w: int = Field(default=4, ge=1, description="Width in grid units")
+    h: int = Field(default=3, ge=1, description="Height in grid units")
+
+
 # Discriminated union — tile_type field selects the concrete model.
-AnyTile = Annotated[Union[EntityTile, WeatherTile, SceneTile], Field(discriminator="tile_type")]
+AnyTile = Annotated[
+    Union[EntityTile, WeatherTile, SceneTile, ForecastChartTile],
+    Field(discriminator="tile_type"),
+]
 
 
 class Layout(BaseModel):
