@@ -12,6 +12,10 @@ class EntityTile(BaseModel):
     label: str = Field(description="Display label shown on the tile")
     icon: str = Field(default="mdi-toggle-switch", description="MDI icon name")
     domain: str = Field(description="HA domain: light, switch, fan, etc.")
+    badge_entity: Optional[str] = Field(
+        default=None,
+        description="Optional sensor entity ID whose state is shown as a small badge (e.g. sensor.filter_life)",
+    )
     x: int = Field(default=0, ge=0, description="Grid column position")
     y: int = Field(default=0, ge=0, description="Grid row position")
     w: int = Field(default=2, ge=1, description="Width in grid units")

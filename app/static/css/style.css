@@ -494,6 +494,18 @@ html, body {
   color: var(--text-dim);
 }
 
+/* ---------- Badge sensor display (optional per entity tile) ---------- */
+
+.tile__badge {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.tile__badge:empty {
+  display: none;
+}
+
 /* ---------- Scene tile ---------- */
 
 .tile__brightness-badge {

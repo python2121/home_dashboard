@@ -151,6 +151,17 @@ const DashboardApp = (() => {
 
   // ── Tile HTML builders ─────────────────────────────────────────────
 
+  /** Return display text for a badge sensor entity (state + unit), or "" if unavailable. */
+  function getBadgeText(badgeEntityId) {
+    if (!badgeEntityId) return "";
+    const s = entityStates[badgeEntityId];
+    if (!s) return "";
+    const val = parseFloat(s.state);
+    const display = isNaN(val) ? s.state : String(Math.round(val));
+    const unit = s.attributes?.unit_of_measurement || "";
+    return unit ? `${display}${unit}` : display;
+  }
+
   /** Build inner HTML for an entity tile. Includes a brightness slider for lights. */
   function tileInnerHTML(tile) {
     const safeIcon  = sanitizeIconClass(tile.icon);
@@ -165,6 +176,9 @@ const DashboardApp = (() => {
              data-entity-id="${safeEid}" />
     ` : "";
 
+    const badgeText = getBadgeText(tile.badge_entity);
+    const badgeHTML = `<span class="tile__badge">${escapeHTML(badgeText)}</span>`;
+
     return `
       <button class="tile__edit" data-tile-id="${safeId}" title="Edit tile">
         <i class="mdi mdi-pencil"></i>
@@ -174,6 +188,7 @@ const DashboardApp = (() => {
       </button>
       <i class="mdi ${safeIcon} tile__icon"></i>
       <span class="tile__label">${safeLabel}</span>
+      ${badgeHTML}
       ${sliderHTML}
     `;
   }
@@ -267,10 +282,11 @@ const DashboardApp = (() => {
       } else {
         tiles.push({
           ...base,
-          entity_id: d.entityId,
-          label:     d.label,
-          icon:      d.icon,
-          domain:    d.domain,
+          entity_id:    d.entityId,
+          label:        d.label,
+          icon:         d.icon,
+          domain:       d.domain,
+          badge_entity: d.badgeEntity || null,
         });
       }
     }
@@ -294,11 +310,12 @@ const DashboardApp = (() => {
     const on = isOn(tile.entity_id);
     const el = document.createElement("div");
     el.className = on ? "tile--on" : "tile--off";
-    el.dataset.tileId   = tile.id;
-    el.dataset.entityId = tile.entity_id;
-    el.dataset.label    = tile.label;
-    el.dataset.icon     = tile.icon;
-    el.dataset.domain   = tile.domain;
+    el.dataset.tileId       = tile.id;
+    el.dataset.entityId     = tile.entity_id;
+    el.dataset.label        = tile.label;
+    el.dataset.icon         = tile.icon;
+    el.dataset.domain       = tile.domain;
+    el.dataset.badgeEntity  = tile.badge_entity || "";
 
     const content = document.createElement("div");
     content.className = "grid-stack-item-content";
@@ -337,6 +354,10 @@ const DashboardApp = (() => {
       if (slider) {
         const brightness = entityStates[entityId]?.attributes?.brightness;
         if (brightness !== undefined) slider.value = brightness;
+      }
+      const badgeEl = el.querySelector(".tile__badge");
+      if (badgeEl) {
+        badgeEl.textContent = getBadgeText(el.dataset.badgeEntity);
       }
     }
   }
@@ -501,6 +522,7 @@ const DashboardApp = (() => {
     labelInput.value = tileEl.dataset.label;
     labelInput.dataset.autoFilled = "false";
     iconInput.value = tileEl.dataset.icon;
+    document.getElementById("tile-badge-entity").value = tileEl.dataset.badgeEntity || "";
   }
 
   function populateWeatherForEdit(tileEl) {
@@ -572,25 +594,28 @@ const DashboardApp = (() => {
 
   function handleAddTileSubmit(e) {
     e.preventDefault();
-    const entityId = $("#tile-entity").value;
-    const label    = $("#tile-label").value.trim();
-    const icon     = $("#tile-icon").value.trim() || defaultIcon(entityId);
+    const entityId    = $("#tile-entity").value;
+    const label       = $("#tile-label").value.trim();
+    const icon        = $("#tile-icon").value.trim() || defaultIcon(entityId);
+    const badgeEntity = $("#tile-badge-entity").value.trim() || null;
 
     if (!entityId || !label) return;
 
     if (editingTileEl) {
       // Update tile in-place
-      editingTileEl.dataset.entityId = entityId;
-      editingTileEl.dataset.label    = label;
-      editingTileEl.dataset.icon     = icon;
-      editingTileEl.dataset.domain   = domainOf(entityId);
+      editingTileEl.dataset.entityId    = entityId;
+      editingTileEl.dataset.label       = label;
+      editingTileEl.dataset.icon        = icon;
+      editingTileEl.dataset.domain      = domainOf(entityId);
+      editingTileEl.dataset.badgeEntity = badgeEntity || "";
 
       const tile = {
-        id:        editingTileEl.dataset.tileId,
-        entity_id: entityId,
+        id:           editingTileEl.dataset.tileId,
+        entity_id:    entityId,
         label,
         icon,
-        domain:    domainOf(entityId),
+        domain:       domainOf(entityId),
+        badge_entity: badgeEntity,
       };
       const content = editingTileEl.querySelector(".grid-stack-item-content");
       content.innerHTML = tileInnerHTML(tile);
@@ -600,12 +625,13 @@ const DashboardApp = (() => {
     }
 
     const tile = {
-      id:        uid(),
-      tile_type: "entity",
-      entity_id: entityId,
+      id:           uid(),
+      tile_type:    "entity",
+      entity_id:    entityId,
       label,
       icon,
-      domain:    domainOf(entityId),
+      domain:       domainOf(entityId),
+      badge_entity: badgeEntity,
       x: 0, y: 0, w: 2, h: 2,
     };
 
