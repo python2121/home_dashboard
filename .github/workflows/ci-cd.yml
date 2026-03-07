@@ -1,0 +1,70 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ── Job 1: Run tests and linter on GitHub's cloud ────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install --no-cache-dir "poetry==1.8.5"
+
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      - name: Lint
+        run: poetry run ruff check .
+
+      - name: Test
+        run: poetry run pytest -v
+
+  # ── Job 2: Build Docker image and push to GHCR ───────────────────────────
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/python2121/home_dashboard:latest
+
+  # ── Job 3: Deploy on self-hosted runner (Synology) ───────────────────────
+  deploy:
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write .env
+        run: |
+          echo "HA_BASE_URL=${{ secrets.HA_BASE_URL }}" > .env
+          echo "HA_TOKEN=${{ secrets.HA_TOKEN }}" >> .env
+          echo "PIRATE_WEATHER_KEY=${{ secrets.PIRATE_WEATHER_KEY }}" >> .env
+
+      - name: Pull and restart
+        run: |
+          docker compose pull
+          docker compose up -d

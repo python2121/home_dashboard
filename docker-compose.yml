@@ -1,6 +1,6 @@
 services:
   dashboard:
-    build: .
+    image: ghcr.io/python2121/home_dashboard:latest
     container_name: home-dashboard
     env_file: .env
     ports:
