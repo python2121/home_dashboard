@@ -275,11 +275,13 @@ Dev machine runs Python 3.9.6; Docker image uses Python 3.11. Pydantic models mu
 
 The following are common features found in popular home dashboards (HADashboard, Dakboard, Home Assistant Lovelace, Hubitat, SmartThings, WallPanel, TileBoard, Fully Kiosk). Each is designed as a new tile type that follows the existing discriminated-union pattern, scales via container queries, and plugs into the existing add-tile modal as a new tab.
 
+Every plan below follows the exact conventions visible in the codebase: Pydantic models with `Field(description=...)`, `"use strict"` IIFE modules exposing a global, `escapeHTML()` via the textContent trick, `grid-stack-item-content` inner div, `data-*` attributes for serialization, `DashboardApp.getEditingTile()` / `DashboardApp.closeAddModal()` for modal flow, and CSS custom properties for all theme colors.
+
 ---
 
 ### 1. Clock / Date Tile (`tile_type: "clock"`)
 
-**What it does**: Displays current time, date, and optionally day-of-week. Universal on wall-mounted dashboards. Pure frontend — no backend needed.
+**What it does**: Displays current time, date, and optionally day-of-week. Universal on wall-mounted dashboards. Pure frontend — no backend route needed.
 
 **Scaling behavior**:
 - 1×1: Time only (e.g., "2:45")
@@ -289,184 +291,792 @@ The following are common features found in popular home dashboards (HADashboard,
 
 **Implementation plan**:
 
-1. **Model** (`app/models.py`):
-   - Add `ClockTile` with fields: `id, label, tile_type="clock", format_24h: bool (default False), show_seconds: bool (default False), timezone: Optional[str] (default None = browser local), x, y, w, h`
-   - Add to `AnyTile` union
+**Step 1 — Model** (`app/models.py`):
+- Add `ClockTile(BaseModel)` following the `WeatherTile` pattern (no entity_id, display-only):
+  ```python
+  class ClockTile(BaseModel):
+      tile_type: Literal["clock"] = "clock"
+      id: str = Field(description="Unique tile identifier")
+      label: str = Field(default="Clock", description="Display label shown on the tile")
+      format_24h: bool = Field(default=False, description="Use 24-hour format")
+      show_seconds: bool = Field(default=False, description="Display seconds")
+      x: int = Field(default=0, ge=0)
+      y: int = Field(default=0, ge=0)
+      w: int = Field(default=2, ge=1)
+      h: int = Field(default=2, ge=1)
+  ```
+- Add `ClockTile` to the `AnyTile` union: `Union[EntityTile, WeatherTile, SceneTile, ForecastChartTile, ClockTile]`
+- No new `model_validator` needed — old layouts without clock tiles are unaffected
 
-2. **Frontend** (`app/static/js/clock.js` — new file):
-   - `ClockTiles` IIFE module
-   - `buildTileHTML(tile)` — container div with `data-format24h`, `data-show-seconds`, `data-timezone`
-   - `startClock()` — single `setInterval(1000)` updates ALL clock tiles every second
-   - `renderTime(el)` — reads dataset, formats via `Intl.DateTimeFormat`, updates `.clock-time` and `.clock-date` spans
-   - `addClockTileToGrid(tile, grid)` — creates DOM, adds to grid, starts clock if first tile
+**Step 2 — Frontend JS** (`app/static/js/clock.js` — new file):
+- Create `ClockTiles` IIFE following the `WeatherTiles` pattern (weather.js):
+  - `escapeHTML(str)` — same textContent trick used in every module
+  - `buildTileHTML(tile)` — returns edit/remove buttons (matching `tile__edit` / `tile__remove` classes exactly) + clock container:
+    ```html
+    <button class="tile__edit" data-tile-id="${safeId}" title="Edit tile">
+      <i class="mdi mdi-pencil"></i>
+    </button>
+    <button class="tile__remove" data-tile-id="${safeId}" title="Remove tile">
+      <i class="mdi mdi-close"></i>
+    </button>
+    <div class="clock-tile">
+      <div class="clock-time">--:--</div>
+      <div class="clock-date"></div>
+    </div>
+    ```
+  - `renderTime(gridItem)` — reads `dataset.format24h`, `dataset.showSeconds`, formats via `Intl.DateTimeFormat` with appropriate options, updates `.clock-time` text and `.clock-date` text (e.g., "Friday, March 6")
+  - `startClock()` — single `setInterval(1000)` that calls `renderTime()` on every `[data-tile-type="clock"]` element. Only one interval regardless of tile count.
+  - `addClockTileToGrid(tile, grid)` — following the exact `addWeatherTileToGrid` pattern:
+    ```javascript
+    function addClockTileToGrid(tile, grid) {
+      const el = document.createElement("div");
+      el.className = "tile--clock";
+      el.dataset.tileType    = "clock";
+      el.dataset.tileId      = tile.id;
+      el.dataset.label       = tile.label || "Clock";
+      el.dataset.format24h   = tile.format_24h ? "true" : "false";
+      el.dataset.showSeconds = tile.show_seconds ? "true" : "false";
 
-3. **CSS** (`app/static/css/style.css`):
-   - `.clock-tile` with `container-type: size`
-   - `.clock-time` — `font-size: max(1.5rem, min(45cqi, 60cqb))`, `font-weight: 700`, `font-variant-numeric: tabular-nums` (prevents jitter)
-   - `.clock-date` — `font-size: max(0.5rem, min(12cqi, 16cqb))`, `color: var(--text-dim)`
-   - `@container clock (max-height: 80px)` — hide date, show time only
-   - `@container clock (max-width: 100px)` — hide seconds and AM/PM
+      const content = document.createElement("div");
+      content.className = "grid-stack-item-content";
+      content.innerHTML = buildTileHTML(tile);
+      el.appendChild(content);
 
-4. **Modal** (`app/templates/index.html`):
-   - Add "Clock" tab to add-tile modal
-   - Fields: label, 12h/24h toggle, show seconds checkbox, timezone dropdown (optional)
+      grid.addWidget(el, { x: tile.x, y: tile.y, w: tile.w, h: tile.h });
+      renderTime(el); // immediate render, don't wait for interval
+    }
+    ```
+  - `populateForEdit(tileEl)` — pre-fills form fields from dataset (matching `ForecastChartTiles.populateForEdit` pattern)
+  - `initModal()` — handles form submit following the `WeatherTiles.initModal()` pattern: read form values, check for `DashboardApp.getEditingTile()` to decide add vs. update, call `addClockTileToGrid` or update dataset attrs, call `DashboardApp.closeAddModal()`
+  - Public API: `{ addClockTileToGrid, populateForEdit, initModal, startClock }`
 
-5. **Script load order**: `scene.js` → `weather.js` → `chart.js` → `clock.js` → `app.js`
+**Step 3 — CSS** (`app/static/css/style.css`):
+- Add theme variable `--clock-bg` to each theme block (dark: `#1b2040`, light: `#e8edf5`, eink: `#f5f5f5`) — subtle tint like `--weather-bg`
+- Add clock tile styles:
+  ```css
+  .clock-tile {
+    container-name: clock;
+    container-type: size;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--clock-bg);
+    color: var(--text);
+    gap: 4px;
+  }
+  .clock-time {
+    font-size: max(1.5rem, min(45cqi, 60cqb));
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    color: var(--text);
+  }
+  .clock-date {
+    font-size: max(0.5rem, min(12cqi, 16cqb));
+    color: var(--text-dim);
+    text-align: center;
+  }
+  @container clock (max-height: 80px) {
+    .clock-date { display: none; }
+  }
+  @container clock (max-width: 100px) {
+    .clock-time { font-size: max(1rem, min(35cqi, 50cqb)); }
+  }
+  ```
+- Tile container inherits existing `.grid-stack-item-content` border-radius and padding
 
-6. **Tests** (`tests/test_models.py` or extend existing):
-   - Validate ClockTile serialization, timezone field optional, default values
+**Step 4 — Modal HTML** (`app/templates/index.html`):
+- Add `"clock"` button to `.modal__tabs` div (after the "Chart" tab):
+  ```html
+  <button class="modal__tab" data-tab="clock">Clock</button>
+  ```
+- Add clock form section (after `chart-form-section`):
+  ```html
+  <div id="clock-form-section" class="section--hidden">
+    <form id="add-clock-form">
+      <label>
+        Label
+        <input id="clock-label" type="text" placeholder="e.g. Kitchen Clock" />
+      </label>
+      <label class="checkbox-row">
+        <input id="clock-24h" type="checkbox" />
+        24-hour format
+      </label>
+      <label class="checkbox-row">
+        <input id="clock-seconds" type="checkbox" />
+        Show seconds
+      </label>
+      <div class="modal__actions">
+        <button type="button" id="btn-cancel-clock" class="btn">Cancel</button>
+        <button type="submit" class="btn btn--primary">Add</button>
+      </div>
+    </form>
+  </div>
+  ```
+- Add `<script src="/static/js/clock.js"></script>` between chart.js and app.js
+
+**Step 5 — Wire into app.js**:
+- In `addTileToGrid(tile)`: add case before the entity fallback:
+  ```javascript
+  if (tile.tile_type === "clock") {
+    ClockTiles.addClockTileToGrid(tile, grid);
+    return;
+  }
+  ```
+- In `serializeLayout()`: add clock case to the serialization switch:
+  ```javascript
+  } else if (tileType === "clock") {
+    tiles.push({
+      ...base,
+      label:        d.label,
+      format_24h:   d.format24h === "true",
+      show_seconds: d.showSeconds === "true",
+    });
+  ```
+- In `refreshTileStates()`: add `if (type === "clock") continue;` (display-only, no HA state)
+- In `handleTileClick()`: add `if (type === "clock") return;` (display-only, no toggle)
+- In `activateTab()`: add `document.getElementById("clock-form-section").classList.toggle("section--hidden", tabName !== "clock");`
+- In `openEditModal()`: add clock branch:
+  ```javascript
+  } else if (type === "clock") {
+    activateTab("clock");
+    ClockTiles.populateForEdit(tileEl);
+    document.querySelector("#add-clock-form button[type='submit']").textContent = "Save";
+  }
+  ```
+- In `closeAddModal()`: reset clock form and restore button text:
+  ```javascript
+  const clockForm = document.getElementById("add-clock-form");
+  if (clockForm) clockForm.reset();
+  const clockSubmit = document.querySelector("#add-clock-form button[type='submit']");
+  if (clockSubmit) clockSubmit.textContent = "Add";
+  ```
+- In `init()`: call `ClockTiles.initModal()` and `ClockTiles.startClock()`
+
+**Step 6 — Tests**:
+- No backend route, so model-only tests. Add to existing test file or create `tests/test_models.py`:
+  - `test_clock_tile_defaults()` — verify `format_24h=False`, `show_seconds=False`, `w=2`, `h=2`
+  - `test_clock_tile_in_layout()` — round-trip: create Layout with a ClockTile, serialize, deserialize, assert fields match
+  - `test_clock_tile_discriminator()` — verify `tile_type="clock"` round-trips through the `AnyTile` union
 
 ---
 
 ### 2. Calendar / Agenda Tile (`tile_type: "calendar"`)
 
-**What it does**: Shows upcoming events from Home Assistant's calendar integration (Google Calendar, CalDAV, local). Common on kitchen/hallway dashboards. Read-only display.
+**What it does**: Shows upcoming events from Home Assistant's calendar integration (Google Calendar, CalDAV, local). Common on kitchen/hallway dashboards. Read-only display — no toggles.
 
 **Scaling behavior**:
-- 2×2: Next 2 events (time + title)
-- 3×3: Next 5 events with color-coded calendar source
-- 4×4: Full day agenda view with time blocks
-- 2×1: Single next event one-liner
+- 2×1: Single next event one-liner ("Meeting 2:00 PM")
+- 2×2: Next 2–3 events (time + title)
+- 3×3: Next 5+ events grouped by day with date headers
+- 4×4: Full agenda view with all events across multiple days
 
 **Implementation plan**:
 
-1. **Model** (`app/models.py`):
-   - Add `CalendarTile` with fields: `id, label, entity_id, days_ahead: int (default 3), max_events: int (default 10), x, y, w, h`
-   - Validate entity_id starts with `calendar.`
+**Step 1 — Model** (`app/models.py`):
+- Add `CalendarTile(BaseModel)`:
+  ```python
+  class CalendarTile(BaseModel):
+      tile_type: Literal["calendar"] = "calendar"
+      id: str = Field(description="Unique tile identifier")
+      label: str = Field(default="Calendar", description="Display label shown on the tile")
+      entity_id: str = Field(description="HA calendar entity ID, e.g. calendar.family")
+      days_ahead: int = Field(default=3, ge=1, le=14, description="Number of days to look ahead")
+      max_events: int = Field(default=10, ge=1, le=50, description="Maximum events to display")
+      x: int = Field(default=0, ge=0)
+      y: int = Field(default=0, ge=0)
+      w: int = Field(default=3, ge=1)
+      h: int = Field(default=3, ge=1)
+  ```
+- Add to `AnyTile` union
 
-2. **Backend** (`app/routers/calendar.py` — new file):
-   - `GET /api/calendar?entity_id=calendar.xxx&days=3` — proxies to HA's `GET /api/calendars/{entity_id}?start=...&end=...`
-   - HA returns `[{summary, start: {dateTime|date}, end: {dateTime|date}, description, location}, ...]`
-   - Backend normalizes response: `[{title, start_iso, end_iso, all_day: bool}, ...]`
-   - Cache: 5-minute in-memory per entity_id
-   - Register router in `app/main.py`
+**Step 2 — Backend** (`app/routers/calendar.py` — new file):
+- Follow the `weather.py` pattern exactly: `APIRouter(prefix="/api/calendar", tags=["calendar"])`, import `settings`, use `httpx.AsyncClient(timeout=10)`, same error handling (`502` for connection errors, `504` for timeouts).
+- Route: `GET /api/calendar`
+  - Query params: `entity_id: str`, `days: int = Query(default=3)`
+  - Validate `entity_id` matches `^calendar\.[a-z0-9_]+$` regex (consistent with `ha_proxy.py` validation)
+  - Calculate date range: `start = datetime.date.today().isoformat()`, `end = (today + timedelta(days=days)).isoformat()`
+  - Proxy to HA: `GET {ha_base_url}/api/calendars/{entity_id}?start={start}T00:00:00&end={end}T23:59:59` with `settings.ha_headers`
+  - HA returns: `[{summary, start: {dateTime|date}, end: {dateTime|date}, ...}, ...]`
+  - Normalize response — map each event to:
+    ```python
+    {
+        "title": event["summary"],
+        "start_iso": event["start"].get("dateTime") or event["start"].get("date"),
+        "end_iso": event["end"].get("dateTime") or event["end"].get("date"),
+        "all_day": "date" in event["start"],
+    }
+    ```
+  - Sort by `start_iso`, truncate to `max_events` (passed as query param)
+  - Cache: 5-minute in-memory per `(entity_id, days)` — same dict pattern as `_cache` in weather.py
+- Register in `app/main.py`: `from app.routers import calendar` then `app.include_router(calendar.router)`
 
-3. **Frontend** (`app/static/js/calendar.js` — new file):
-   - `CalendarTiles` IIFE module
-   - `buildTileHTML(tile)` — scrollable list container
-   - `renderEvents(el, events)` — groups events by date, renders date headers + event rows
-   - Event row: time range (or "All day") + title, truncated with ellipsis
-   - Today's events highlighted, past events dimmed
-   - `refreshTile(el)` — fetches from `/api/calendar?entity_id=...&days=...`
-   - `startRefreshTimer()` — refresh all calendar tiles every 5 minutes
+**Step 3 — Frontend JS** (`app/static/js/calendar.js` — new file):
+- Create `CalendarTiles` IIFE following `WeatherTiles` pattern:
+  - `REFRESH_INTERVAL = 5 * 60 * 1000` (5 minutes)
+  - `escapeHTML(str)` — same textContent trick
+  - `buildTileHTML(tile)` — edit/remove buttons + scrollable event container:
+    ```html
+    <button class="tile__edit" ...></button>
+    <button class="tile__remove" ...></button>
+    <div class="calendar-tile">
+      <div class="calendar-header">${safeLabel}</div>
+      <div class="calendar-events"><span class="calendar-loading">Loading…</span></div>
+    </div>
+    ```
+  - `formatEventTime(startIso, endIso, allDay)` — returns "All day", "2:00 PM", or "2:00–3:30 PM" using `Intl.DateTimeFormat`
+  - `formatDateHeader(isoDate)` — returns "Today", "Tomorrow", or "Wed, Mar 12" relative to current date
+  - `renderEvents(contentEl, events)`:
+    - Group events by date (extract `YYYY-MM-DD` from `start_iso`)
+    - For each group: append a `.calendar-date-header` div, then `.calendar-event` rows
+    - Each event row: `.calendar-time` span + `.calendar-title` span (escaped)
+    - Add `.calendar-event--past` class if event end time is before now
+    - Use `document.createElement` + `textContent` for all user data (XSS safe)
+  - `refreshTile(gridItem)` — fetch from `/api/calendar?entity_id=...&days=...&max_events=...`, call `renderEvents` on success, show "Failed to load" on error (same pattern as `WeatherTiles.refreshTile`)
+  - `refreshAllTiles()` — iterate `[data-tile-type="calendar"]` elements
+  - `startRefreshTimer()` — `setInterval(refreshAllTiles, REFRESH_INTERVAL)`
+  - `addCalendarTileToGrid(tile, grid)` — create element, set dataset attrs (`tileType`, `tileId`, `label`, `entityId`, `daysAhead`, `maxEvents`), build content, call `grid.addWidget`, call `refreshTile` immediately
+  - `populateForEdit(tileEl)` — fill form fields from dataset
+  - `initModal()` — form submit handler following `WeatherTiles.initModal` pattern
+  - Public API: `{ addCalendarTileToGrid, populateForEdit, initModal, startRefreshTimer, refreshTile }`
 
-4. **CSS**:
-   - `.calendar-tile` — `container-type: size`, `overflow-y: auto` (scrollable)
-   - `.calendar-date-header` — `font-size: max(0.5rem, min(8cqi, 11cqb))`, `font-weight: 600`, `color: var(--text-dim)`, `border-bottom: 1px solid`
-   - `.calendar-event` — flex row, `padding: 4px 0`
-   - `.calendar-time` — `min-width: 3em`, `color: var(--primary)`, `font-size: max(0.45rem, min(7cqi, 10cqb))`
-   - `.calendar-title` — `white-space: nowrap`, `overflow: hidden`, `text-overflow: ellipsis`
-   - `.calendar-event--past` — `opacity: 0.4`
-   - `@container calendar (max-height: 100px)` — show only next 2 events, hide date headers
-   - `@container calendar (max-width: 130px)` — hide time column, title only
+**Step 4 — CSS** (`app/static/css/style.css`):
+- Add `--calendar-bg` theme variable (dark: `#1b2535`, light: `#edf2f7`, eink: `#f5f5f5`)
+- Calendar tile styles:
+  ```css
+  .calendar-tile {
+    container-name: calendar;
+    container-type: size;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background: var(--calendar-bg);
+    color: var(--text);
+    padding: 8px;
+    overflow: hidden;
+  }
+  .calendar-header {
+    font-size: max(0.55rem, min(9cqi, 12cqb));
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    flex-shrink: 0;
+  }
+  .calendar-events {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .calendar-date-header {
+    font-size: max(0.45rem, min(7cqi, 10cqb));
+    font-weight: 600;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--edit-outline);
+    padding: 4px 0 2px;
+    margin-top: 4px;
+  }
+  .calendar-date-header:first-child { margin-top: 0; }
+  .calendar-event {
+    display: flex;
+    gap: 6px;
+    padding: 3px 0;
+    align-items: baseline;
+  }
+  .calendar-time {
+    font-size: max(0.4rem, min(6cqi, 9cqb));
+    color: var(--primary);
+    white-space: nowrap;
+    min-width: 3.5em;
+    flex-shrink: 0;
+  }
+  .calendar-title {
+    font-size: max(0.45rem, min(7cqi, 10cqb));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
+  .calendar-event--past { opacity: 0.4; }
+  .calendar-loading {
+    font-size: max(0.5rem, min(8cqi, 11cqb));
+    color: var(--text-dim);
+  }
+  @container calendar (max-height: 100px) {
+    .calendar-header { display: none; }
+    .calendar-date-header { display: none; }
+    .calendar-event:nth-child(n+3) { display: none; }
+  }
+  @container calendar (max-width: 130px) {
+    .calendar-time { display: none; }
+  }
+  ```
 
-5. **Modal**: Calendar tab — entity dropdown filtered to `calendar.*`, label, days ahead slider (1–14), max events slider (3–20)
+**Step 5 — Modal HTML** (`app/templates/index.html`):
+- Add `"calendar"` tab button to `.modal__tabs`
+- Add form section:
+  ```html
+  <div id="calendar-form-section" class="section--hidden">
+    <form id="add-calendar-form">
+      <label>
+        Label
+        <input id="calendar-label" type="text" placeholder="e.g. Family Calendar" />
+      </label>
+      <label>
+        Calendar Entity
+        <input id="calendar-entity" type="text" required placeholder="calendar.family" />
+      </label>
+      <label>
+        Days ahead
+        <input id="calendar-days" type="number" value="3" min="1" max="14" />
+      </label>
+      <label>
+        Max events
+        <input id="calendar-max-events" type="number" value="10" min="1" max="50" />
+      </label>
+      <div class="modal__actions">
+        <button type="button" id="btn-cancel-calendar" class="btn">Cancel</button>
+        <button type="submit" class="btn btn--primary">Add</button>
+      </div>
+    </form>
+  </div>
+  ```
+- Add `<script src="/static/js/calendar.js"></script>` between chart.js and app.js
 
-6. **Tests** (`tests/test_calendar.py`):
-   - Mock HA calendar API, verify event normalization, caching, date range calculation
+**Step 6 — Wire into app.js**:
+- `addTileToGrid()`: add `if (tile.tile_type === "calendar") { CalendarTiles.addCalendarTileToGrid(tile, grid); return; }`
+- `serializeLayout()`: add calendar case reading `d.entityId`, `d.label`, `d.daysAhead`, `d.maxEvents`
+- `refreshTileStates()`: add `if (type === "calendar") continue;` (self-refreshing, not HA-state-driven)
+- `handleTileClick()`: add `if (type === "calendar") return;` (display-only)
+- `activateTab()`: add calendar-form-section toggle
+- `openEditModal()`: add calendar branch calling `CalendarTiles.populateForEdit(tileEl)`
+- `closeAddModal()`: reset calendar form
+- `init()`: call `CalendarTiles.initModal()` and `CalendarTiles.startRefreshTimer()`
+
+**Step 7 — Tests** (`tests/test_calendar.py`):
+- Add `_calendar_cache` clearing to `conftest.py` (same pattern as weather cache clearing)
+- `test_get_calendar_success()` — mock `httpx.AsyncClient.get` to return fake HA calendar events, verify response shape `[{title, start_iso, end_iso, all_day}, ...]`
+- `test_get_calendar_all_day_event()` — verify `all_day: true` when event uses `date` instead of `dateTime`
+- `test_calendar_cache_hit()` — call twice, verify upstream only called once (same pattern as `test_cache_hit_skips_upstream` in test_weather.py)
+- `test_calendar_invalid_entity_id()` — verify 400 for entity IDs not matching `calendar.*` regex
+- `test_calendar_events_sorted()` — verify events returned in chronological order
 
 ---
 
 ### 3. Energy Monitor Tile (`tile_type: "energy"`)
 
-**What it does**: Displays real-time power consumption, daily energy usage, and optionally solar production / grid import-export. Works with smart plugs, whole-home monitors (Emporia Vue, Sense), and HA energy dashboard sensors.
+**What it does**: Displays real-time power consumption (watts), daily energy usage (kWh), optional cost estimate, and an SVG usage chart. Works with smart plugs, whole-home monitors (Emporia Vue, Sense), and any HA sensor reporting watts or kWh.
 
 **Scaling behavior**:
-- 1×1: Current watts (e.g., "1.2 kW")
-- 2×2: Current watts + today's kWh + simple bar sparkline
-- 3×2: Current watts + today's kWh + cost estimate + SVG usage chart (last 6 hours)
-- 4×3: Full display with solar production, grid import/export, net consumption, 12-hour chart
+- 1×1: Current watts only (e.g., "1.2 kW") with lightning bolt icon
+- 2×2: Current watts + today's kWh + cost estimate
+- 3×2: Watts + kWh + cost + SVG sparkline area chart (last 6 hours)
+- 4×3: Full display with solar production row, grid import/export, 12-hour chart
 
 **Implementation plan**:
 
-1. **Model** (`app/models.py`):
-   - Add `EnergyTile` with fields: `id, label, power_entity: str (sensor for current watts), energy_entity: Optional[str] (sensor for daily kWh), solar_entity: Optional[str] (sensor for solar production), cost_per_kwh: Optional[float], icon (default "mdi-lightning-bolt"), x, y, w, h`
+**Step 1 — Model** (`app/models.py`):
+- Add `EnergyTile(BaseModel)`:
+  ```python
+  class EnergyTile(BaseModel):
+      tile_type: Literal["energy"] = "energy"
+      id: str = Field(description="Unique tile identifier")
+      label: str = Field(default="Energy", description="Display label shown on the tile")
+      power_entity: str = Field(description="Sensor entity for current watts, e.g. sensor.power_consumption")
+      energy_entity: Optional[str] = Field(
+          default=None, description="Sensor entity for daily kWh (optional)"
+      )
+      solar_entity: Optional[str] = Field(
+          default=None, description="Sensor entity for solar production watts (optional)"
+      )
+      cost_per_kwh: Optional[float] = Field(
+          default=None, ge=0, description="Electricity cost per kWh for cost estimate"
+      )
+      x: int = Field(default=0, ge=0)
+      y: int = Field(default=0, ge=0)
+      w: int = Field(default=3, ge=1)
+      h: int = Field(default=2, ge=1)
+  ```
+- Add to `AnyTile` union
 
-2. **Backend** (`app/routers/energy.py` — new file):
-   - `GET /api/energy/history?entity_id=sensor.xxx&hours=12` — proxies to HA's `GET /api/history/period/{start}?filter_entity_id={id}&minimal_response`
-   - Returns simplified timeseries: `[{time_iso, value: float}, ...]` sampled to ~1 point per 10 minutes
-   - Cache: 2-minute in-memory per entity_id
+**Step 2 — Backend** (`app/routers/energy.py` — new file):
+- Follow `weather.py` pattern: `APIRouter(prefix="/api/energy", tags=["energy"])`, logger, cache dict
+- Route: `GET /api/energy/history`
+  - Query params: `entity_id: str`, `hours: int = Query(default=6, ge=1, le=24)`
+  - Validate `entity_id` matches `^sensor\.[a-z0-9_]+$` regex
+  - Calculate start time: `(datetime.utcnow() - timedelta(hours=hours)).isoformat()`
+  - Proxy to HA: `GET {ha_base_url}/api/history/period/{start}?filter_entity_id={entity_id}&minimal_response&no_attributes` with `settings.ha_headers`
+  - HA returns: `[[{state, last_changed}, ...]]` (array of arrays)
+  - Downsample to ~1 point per 10 minutes: iterate entries, keep one per 10-min window
+  - Return: `{"points": [{"iso": "2024-06-01T14:00:00", "value": 1250.0}, ...]}` — filter out non-numeric states ("unavailable", "unknown")
+  - Cache: 2-minute TTL per `(entity_id, hours)` — same dict pattern as weather
+- Register in `app/main.py`
 
-3. **Frontend** (`app/static/js/energy.js` — new file):
-   - `EnergyTiles` IIFE module
-   - `buildTileHTML(tile)` — current power display, daily usage, optional solar section, SVG chart area
-   - `updateFromState(el, entityStates)` — reads current watts from `power_entity`, daily kWh from `energy_entity`, solar from `solar_entity`
-   - `renderChart(canvasEl, history)` — SVG area chart (similar style to ForecastChartTile), filled below line
-   - Format helpers: auto-scale W/kW, kWh with 1 decimal, cost as `$X.XX`
-   - Refresh chart data every 5 minutes
+**Step 3 — Frontend JS** (`app/static/js/energy.js` — new file):
+- Create `EnergyTiles` IIFE:
+  - `REFRESH_INTERVAL = 5 * 60 * 1000` (5 minutes for chart data)
+  - `escapeHTML(str)`, `cssVar(name)` — same helpers as chart.js
+  - `formatPower(watts)` — returns `"1.2 kW"` or `"450 W"` depending on magnitude
+  - `formatEnergy(kwh)` — returns `"12.4 kWh"`
+  - `formatCost(kwh, rate)` — returns `"$1.86"` or `""` if no rate
+  - `buildTileHTML(tile)` — edit/remove buttons + energy container:
+    ```html
+    <div class="energy-tile">
+      <i class="mdi mdi-lightning-bolt energy-icon"></i>
+      <div class="energy-current">-- W</div>
+      <div class="energy-daily"></div>
+      <div class="energy-solar"></div>
+      <div class="energy-chart"></div>
+    </div>
+    ```
+  - `updateFromState(el, entityStates)` — called from `refreshTileStates()` in app.js:
+    - Read `power_entity` state → update `.energy-current` with `formatPower()`
+    - Read `energy_entity` state → update `.energy-daily` with kWh + cost
+    - Read `solar_entity` state → update `.energy-solar` with solar watts
+    - Color the icon: green if producing (solar > consumption), yellow otherwise
+  - `renderChart(chartEl, points)` — SVG area chart using same `svgEl()` / `svgText()` / `makeSVG()` helpers from chart.js (or duplicated locally):
+    - viewBox `"0 0 200 40"`, `preserveAspectRatio="none"`
+    - Filled area below the line (`<polygon>`) with semi-transparent `var(--primary)` fill
+    - Polyline on top with `var(--chart-line)` stroke
+    - X-axis time labels ("2p", "3p") at evenly spaced intervals
+    - Y-axis: normalize watts to viewBox y range 6–31
+  - `refreshChart(gridItem)` — fetch from `/api/energy/history?entity_id=...&hours=6`, call `renderChart`
+  - `refreshAllCharts()` — iterate `[data-tile-type="energy"]`, call `refreshChart`
+  - `startRefreshTimer()` — `setInterval(refreshAllCharts, REFRESH_INTERVAL)`
+  - `addEnergyTileToGrid(tile, grid)` — create element, set all dataset attrs (`powerEntity`, `energyEntity`, `solarEntity`, `costPerKwh`), build content, `grid.addWidget`, call `refreshChart`
+  - `populateForEdit(tileEl)` — fill form from dataset
+  - `initModal()` — form submit following standard pattern
+  - Public API: `{ addEnergyTileToGrid, updateFromState, populateForEdit, initModal, startRefreshTimer }`
 
-4. **CSS**:
-   - `.energy-tile` — `container-type: size`
-   - `.energy-current` — `font-size: max(1.2rem, min(30cqi, 40cqb))`, `font-weight: 700`
-   - `.energy-unit` — `font-size: 0.5em`, `color: var(--text-dim)`
-   - `.energy-daily` — smaller, "Today: 12.4 kWh ($1.86)"
-   - `.energy-solar` — green-tinted, `mdi-solar-power` icon
-   - `.energy-chart` — SVG area, same pattern as chart.js
-   - `@container energy (max-height: 100px)` — hide chart and daily, show watts only
-   - `@container energy (max-width: 130px)` — hide daily and solar
+**Step 4 — CSS** (`app/static/css/style.css`):
+- Add `--energy-bg` theme variable (dark: `#1b2520`, light: `#edf7ed`, eink: `#f5f5f5`)
+- Add `--energy-solar: #22c55e` (green) across all themes
+- Energy tile styles:
+  ```css
+  .energy-tile {
+    container-name: energy;
+    container-type: size;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--energy-bg);
+    color: var(--text);
+    gap: 2px;
+    padding: 8px;
+  }
+  .energy-icon {
+    font-size: max(0.8rem, min(16cqi, 22cqb));
+    color: var(--icon-on);
+  }
+  .energy-current {
+    font-size: max(1.2rem, min(30cqi, 40cqb));
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+  .energy-daily {
+    font-size: max(0.45rem, min(8cqi, 11cqb));
+    color: var(--text-dim);
+  }
+  .energy-solar {
+    font-size: max(0.45rem, min(8cqi, 11cqb));
+    color: var(--energy-solar);
+  }
+  .energy-chart {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+  .energy-chart svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  @container energy (max-height: 100px) {
+    .energy-chart { display: none; }
+    .energy-daily { display: none; }
+    .energy-solar { display: none; }
+    .energy-icon { display: none; }
+  }
+  @container energy (max-width: 130px) {
+    .energy-daily { display: none; }
+    .energy-solar { display: none; }
+    .energy-chart { display: none; }
+  }
+  ```
 
-5. **Modal**: Energy tab — power sensor dropdown, optional energy/solar sensor dropdowns, cost per kWh input
+**Step 5 — Modal HTML** (`app/templates/index.html`):
+- Add `"energy"` tab button to `.modal__tabs`
+- Add form section:
+  ```html
+  <div id="energy-form-section" class="section--hidden">
+    <form id="add-energy-form">
+      <label>
+        Label
+        <input id="energy-label" type="text" placeholder="e.g. Home Power" />
+      </label>
+      <label>
+        Power sensor (watts)
+        <input id="energy-power-entity" type="text" required placeholder="sensor.power_consumption" />
+      </label>
+      <label>
+        Daily energy sensor (kWh) <small style="color: var(--text-dim)">(optional)</small>
+        <input id="energy-energy-entity" type="text" placeholder="sensor.daily_energy" />
+      </label>
+      <label>
+        Solar sensor (watts) <small style="color: var(--text-dim)">(optional)</small>
+        <input id="energy-solar-entity" type="text" placeholder="sensor.solar_power" />
+      </label>
+      <label>
+        Cost per kWh ($) <small style="color: var(--text-dim)">(optional)</small>
+        <input id="energy-cost" type="number" step="0.01" min="0" placeholder="0.12" />
+      </label>
+      <div class="modal__actions">
+        <button type="button" id="btn-cancel-energy" class="btn">Cancel</button>
+        <button type="submit" class="btn btn--primary">Add</button>
+      </div>
+    </form>
+  </div>
+  ```
+- Add `<script src="/static/js/energy.js"></script>` between chart.js and app.js
 
-6. **Tests**: Mock HA history API, verify timeseries sampling, cost calculation
+**Step 6 — Wire into app.js**:
+- `addTileToGrid()`: add energy case
+- `serializeLayout()`: add energy case reading `d.label`, `d.powerEntity`, `d.energyEntity`, `d.solarEntity`, `d.costPerKwh`
+- `refreshTileStates()`: add energy case — call `EnergyTiles.updateFromState(el, entityStates)` (current watts/kWh update from poll; chart refreshes on its own timer)
+- `handleTileClick()`: add `if (type === "energy") return;` (display-only)
+- `activateTab()`, `openEditModal()`, `closeAddModal()`: add energy form handling
+- `init()`: call `EnergyTiles.initModal()` and `EnergyTiles.startRefreshTimer()`
+
+**Step 7 — Tests** (`tests/test_energy.py`):
+- Add `_energy_cache` clearing to `conftest.py`
+- `test_get_energy_history_success()` — mock HA history API, verify downsampled points
+- `test_energy_filters_non_numeric()` — verify "unavailable" / "unknown" states are excluded
+- `test_energy_cache_hit()` — call twice, verify upstream only called once
+- `test_energy_invalid_entity_id()` — verify 400 for non-sensor entities
 
 ---
 
 ### 4. Garbage / Recycling Collection Tile (`tile_type: "waste"`)
 
-**What it does**: Shows next pickup dates for trash, recycling, and yard waste. Uses HA integrations (Waste Collection Schedule, custom sensors). Very popular on kitchen dashboards to answer "is it trash day?"
+**What it does**: Shows next pickup dates for trash, recycling, and yard waste. Uses HA integrations (Waste Collection Schedule HACS, custom template sensors). Very popular on kitchen dashboards. Display-only — no toggles.
 
 **Scaling behavior**:
-- 1×1: Colored icon indicating which bin is next
-- 2×1: "Trash: Tomorrow" one-liner
-- 2×2: Next 2–3 pickup types with dates and colored icons
-- 3×2: Full week view with all waste types
+- 1×1: Single colored icon of the soonest pickup type
+- 2×1: "Trash: Tomorrow" — soonest pickup as a one-liner
+- 2×2: Next 2–3 pickup types with colored dot icons and relative dates
+- 3×2: All waste types with icons, type names, and dates
 
 **Implementation plan**:
 
-1. **Model** (`app/models.py`):
-   - Add `WasteTile` with fields: `id, label, members: List[WasteMember], x, y, w, h`
-   - `WasteMember`: `entity_id: str, waste_type: str ("trash"|"recycling"|"yard"|"compost"|custom), color: str (hex, e.g., "#4caf50"), icon: str (default varies by type)`
-   - Default icons: trash → `mdi-trash-can`, recycling → `mdi-recycle`, yard → `mdi-leaf`, compost → `mdi-compost`
+**Step 1 — Model** (`app/models.py`):
+- Add `WasteMember(BaseModel)` and `WasteTile(BaseModel)` following the `SceneMember`/`SceneTile` pattern for multi-member tiles:
+  ```python
+  class WasteMember(BaseModel):
+      entity_id: str = Field(description="HA sensor entity ID for this waste type")
+      waste_type: str = Field(description="Display name: Trash, Recycling, Yard Waste, etc.")
+      color: str = Field(default="#6b7280", description="Hex color for the icon dot")
+      icon: str = Field(default="mdi-trash-can", description="MDI icon name")
 
-2. **Backend**: No new routes — waste sensors are standard HA sensors with `state` as a date string or days-until count.
+  class WasteTile(BaseModel):
+      tile_type: Literal["waste"] = "waste"
+      id: str = Field(description="Unique tile identifier")
+      label: str = Field(default="Collection", description="Display label shown on the tile")
+      members: List[WasteMember] = Field(
+          description="Waste collection types to track",
+          min_length=1,
+      )
+      x: int = Field(default=0, ge=0)
+      y: int = Field(default=0, ge=0)
+      w: int = Field(default=2, ge=1)
+      h: int = Field(default=2, ge=1)
+  ```
+- Add to `AnyTile` union
 
-3. **Frontend** (`app/static/js/waste.js` — new file):
-   - `WasteTiles` IIFE module
-   - `buildTileHTML(tile)` — list of waste entries
-   - `updateFromState(el, entityStates)` — for each member:
-     - Parse state as date or number (days until)
-     - Format: "Today", "Tomorrow", "Wed", or "Mar 12"
-     - Sort by soonest first
-     - Highlight today/tomorrow entries with attention color
-   - Register with `app.js` poll cycle
+**Step 2 — Backend**: No new routes needed. Waste collection sensors are standard HA `sensor.*` entities. Their `state` is typically:
+- A date string like `"2024-06-05"` (from Waste Collection Schedule HACS integration)
+- A number like `"2"` (days until next collection)
+- Or a friendly string like `"Tomorrow"` (from custom template sensors)
 
-4. **CSS**:
-   - `.waste-tile` — `container-type: size`
-   - `.waste-entry` — flex row: colored icon + type label + date
-   - `.waste-icon` — circle with `background: var(--waste-color)`, white icon
-   - `.waste-today` — pulsing border or highlighted background
-   - `.waste-tomorrow` — slightly highlighted
-   - `@container waste (max-height: 80px)` — show only next pickup (soonest)
-   - `@container waste (max-width: 130px)` — hide type label, show icon + date only
+All readable via the existing `GET /api/ha/states` poll.
 
-5. **Modal**: Waste tab — dynamic member list builder (add rows: pick entity, waste type dropdown, color picker, icon)
+**Step 3 — Frontend JS** (`app/static/js/waste.js` — new file):
+- Create `WasteTiles` IIFE:
+  - `escapeHTML(str)` — same helper
+  - `parsePickupDate(stateValue)` — smart parser that handles multiple formats:
+    - ISO date string `"2024-06-05"` → `Date` object
+    - Number string `"2"` → `Date` = today + 2 days
+    - Already-relative `"Today"` / `"Tomorrow"` → `Date` for today/tomorrow
+    - Returns `null` for `"unavailable"` / `"unknown"`
+  - `formatRelativeDate(date)` — returns human-friendly string:
+    - Same day → `"Today"`
+    - Tomorrow → `"Tomorrow"`
+    - Within 6 days → weekday name `"Wednesday"`
+    - Otherwise → `"Mar 12"`
+  - `daysUntil(date)` — returns integer days from today (for sorting and urgency)
+  - `buildTileHTML(tile)` — edit/remove buttons + waste container:
+    ```html
+    <div class="waste-tile">
+      <div class="waste-header">${safeLabel}</div>
+      <div class="waste-entries"></div>
+    </div>
+    ```
+  - `updateFromState(el, entityStates)` — called during poll cycle from `refreshTileStates()`:
+    - Parse `members` from `el.dataset.members` (JSON, same pattern as SceneTile)
+    - For each member: read `entityStates[member.entity_id]`, call `parsePickupDate`, build entry object `{type, color, icon, date, daysUntil}`
+    - Sort entries by `daysUntil` ascending (soonest first)
+    - Clear `.waste-entries`, rebuild using `document.createElement`:
+      - Each `.waste-entry`: colored `.waste-dot` (inline style `background: member.color`) + `.waste-type` span + `.waste-date` span
+      - Add `.waste-entry--today` class if `daysUntil === 0`
+      - Add `.waste-entry--tomorrow` class if `daysUntil === 1`
+      - Use `textContent` for all user data (XSS safe)
+  - `addWasteTileToGrid(tile, grid)` — create element, set dataset attrs (`tileType`, `tileId`, `label`, `members` as JSON string), build content, `grid.addWidget`
+  - `populateForEdit(tileEl)` — pre-fill modal form from dataset, rebuild member rows
+  - `initModal(getEntityStates)` — needs entity states for sensor dropdown. Dynamic member builder UI:
+    - "Add type" button appends a row: sensor entity input + type name input + color picker `<input type="color">` + icon input + remove button
+    - On submit: collect all member rows into array, create/update tile
+  - `resetModal()` — clear all dynamic member rows (same pattern as `SceneTiles.resetModal`)
+  - Public API: `{ addWasteTileToGrid, updateFromState, populateForEdit, initModal, resetModal }`
 
-6. **Tests**: Verify date parsing (ISO date, days-until number), sorting, relative date formatting
+**Step 4 — CSS** (`app/static/css/style.css`):
+- Waste tile styles:
+  ```css
+  .waste-tile {
+    container-name: waste;
+    container-type: size;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    color: var(--text);
+    padding: 8px;
+    gap: 4px;
+  }
+  .waste-header {
+    font-size: max(0.5rem, min(9cqi, 12cqb));
+    font-weight: 600;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .waste-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    overflow: hidden;
+  }
+  .waste-entry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .waste-dot {
+    width: max(8px, min(3cqi, 4cqb));
+    height: max(8px, min(3cqi, 4cqb));
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .waste-type {
+    font-size: max(0.45rem, min(7cqi, 10cqb));
+    color: var(--text-dim);
+    white-space: nowrap;
+    min-width: 4em;
+  }
+  .waste-date {
+    font-size: max(0.45rem, min(7cqi, 10cqb));
+    color: var(--text);
+    font-weight: 500;
+    margin-left: auto;
+  }
+  .waste-entry--today .waste-date {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .waste-entry--tomorrow .waste-date {
+    color: var(--icon-on);
+    font-weight: 600;
+  }
+  @container waste (max-height: 80px) {
+    .waste-header { display: none; }
+    .waste-entry:nth-child(n+2) { display: none; }
+  }
+  @container waste (max-width: 130px) {
+    .waste-type { display: none; }
+  }
+  ```
+
+**Step 5 — Modal HTML** (`app/templates/index.html`):
+- Add `"waste"` tab button to `.modal__tabs`
+- Add form section with dynamic member builder:
+  ```html
+  <div id="waste-form-section" class="section--hidden">
+    <div id="waste-form-inner">
+      <label>
+        Label
+        <input id="waste-label" type="text" placeholder="e.g. Collection Schedule" />
+      </label>
+      <div class="waste-member-header">
+        <span>Collection types</span>
+        <button type="button" id="btn-waste-add-row" class="btn btn--small">+ Add</button>
+      </div>
+      <div id="waste-member-list"></div>
+      <div class="modal__actions">
+        <button type="button" id="btn-cancel-waste" class="btn">Cancel</button>
+        <button type="button" id="btn-waste-confirm" class="btn btn--primary">Add</button>
+      </div>
+    </div>
+  </div>
+  ```
+- Each dynamically added member row (created in JS):
+  ```html
+  <div class="waste-member-row">
+    <input type="text" placeholder="sensor.trash_pickup" class="waste-row-entity" />
+    <input type="text" placeholder="Trash" class="waste-row-type" />
+    <input type="color" value="#4caf50" class="waste-row-color" />
+    <button type="button" class="waste-row-remove btn btn--small">✕</button>
+  </div>
+  ```
+- Add `<script src="/static/js/waste.js"></script>` between chart.js and app.js
+
+**Step 6 — Wire into app.js**:
+- `addTileToGrid()`: add waste case
+- `serializeLayout()`: add waste case reading `d.label` and `JSON.parse(d.members)` (same pattern as scene serialization)
+- `refreshTileStates()`: add waste case — call `WasteTiles.updateFromState(el, entityStates)` (reads sensor states from the poll)
+- `handleTileClick()`: add `if (type === "waste") return;` (display-only)
+- `activateTab()`, `openEditModal()`, `closeAddModal()`: add waste form handling. `closeAddModal` must call `WasteTiles.resetModal()` (same pattern as `SceneTiles.resetModal()`)
+- `init()`: call `WasteTiles.initModal(() => entityStates)` (passes state getter, same pattern as `SceneTiles.initModal`)
+
+**Step 7 — Tests**:
+- Model tests: verify `WasteMember` and `WasteTile` serialization, `min_length=1` on members, default color/icon values
+- Verify `WasteTile` round-trips through the `AnyTile` discriminated union
+- No backend route tests needed (uses existing HA state proxy)
 
 ---
 
 ### General Implementation Notes for All New Tiles
 
-**Pattern to follow for every new tile**:
+**Pattern to follow for every new tile** (checklist):
 
-1. Add Pydantic model class to `app/models.py`, add to `AnyTile` union
-2. Create `app/static/js/{tiletype}.js` as an IIFE exposing a global (e.g., `ClockTiles`)
-3. Add `<script>` tag to `index.html` BEFORE `app.js`
-4. Add CSS to `style.css` with `container-type: size` and responsive `@container` queries
-5. Add tab to the add-tile modal in `index.html`
-6. Wire into `app.js`: `addTileToGrid()` switch case, `refreshTileStates()` if state-driven, modal tab switching
-7. Add `tile_type` to the `Layout.model_validator` backfill logic if needed
-8. Write tests for any new backend routes
-9. Run `poetry run pytest -v && poetry run ruff check .` before done
+1. **Model**: Add Pydantic model class to `app/models.py` with `tile_type: Literal["..."]` discriminator, `Field(description=...)` on all fields, grid position fields `x, y, w, h` with `ge=0`/`ge=1`. Add to `AnyTile` union.
+2. **JS module**: Create `app/static/js/{tiletype}.js` as a `"use strict"` IIFE exposing a global (e.g., `ClockTiles`). Include `escapeHTML()` helper. Follow the `buildTileHTML` → `addXxxTileToGrid` → `initModal` → public API pattern from weather.js.
+3. **HTML**: Add `<script>` tag to `index.html` BEFORE `app.js`. Add tab button to `.modal__tabs`. Add form `<div>` section with `class="section--hidden"`.
+4. **CSS**: Add to `style.css` with `container-name` and `container-type: size`. Use `cqi`/`cqb` units for font sizing. Add `@container` queries for small-tile breakpoints. Add theme-specific `--*-bg` variable to all three theme blocks (:root, [data-theme="light"], [data-theme="eink"]).
+5. **app.js wiring** — touch all these functions:
+   - `addTileToGrid()` — add type case
+   - `serializeLayout()` — add serialization case reading from `dataset`
+   - `refreshTileStates()` — add `continue` (display-only) or call module's `updateFromState()` (state-driven)
+   - `handleTileClick()` — add `return` (display-only) or call module's toggle handler
+   - `activateTab()` — add form section toggle
+   - `openEditModal()` — add branch calling module's `populateForEdit()`
+   - `closeAddModal()` — reset form, restore button text, call module's `resetModal()` if it has one
+   - `init()` — call module's `initModal()` and `startRefreshTimer()` / `startClock()` if applicable
+6. **Backend** (if needed): Create `app/routers/{name}.py` following `weather.py` pattern: `APIRouter(prefix=..., tags=[...])`, `httpx.AsyncClient(timeout=10)`, in-memory cache dict, same error handling (502/504). Register in `app/main.py`.
+7. **Tests**: Mock external APIs with `httpx` mocking pattern from existing tests. Add cache clearing to `conftest.py`. Run `poetry run pytest -v && poetry run ruff check .` before done.
 
-**Scaling philosophy**: Every tile should be usable at 1×1 (minimal info) and gracefully add detail as size increases. Use `@container` queries with `cqi`/`cqb` units for font sizing and show/hide thresholds. Never use viewport-based media queries for tile content.
+**Scaling philosophy**: Every tile should be usable at 1×1 (minimal info) and gracefully add detail as size increases. Use `@container` queries with `cqi`/`cqb` units for font sizing and show/hide thresholds at specific pixel breakpoints. Never use viewport-based media queries for tile content — tiles are responsive to their own container size, not the screen.
