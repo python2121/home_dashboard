@@ -14,7 +14,8 @@ class EntityTile(BaseModel):
     domain: str = Field(description="HA domain: light, switch, fan, etc.")
     badge_entity: Optional[str] = Field(
         default=None,
-        description="Optional sensor entity ID whose state is shown as a small badge (e.g. sensor.filter_life)",
+        description="Optional sensor entity ID whose state is shown as a small badge"
+        " (e.g. sensor.filter_life)",
     )
     x: int = Field(default=0, ge=0, description="Grid column position")
     y: int = Field(default=0, ge=0, description="Grid row position")
