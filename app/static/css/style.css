@@ -11,11 +11,11 @@
 }
 
 :root {
-  --bg: #1a1a2e;
-  --surface: #16213e;
-  --surface-hover: #1a2744;
-  --tile-on: #0f3460;
-  --tile-off: #262640;
+  --bg: #141820;
+  --surface: #1a2030;
+  --surface-hover: #1e2738;
+  --tile-on: #0e2e52;
+  --tile-off: #1e2230;
   --accent: #e94560;
   --primary: #537ec5;
   --text: #eaeaea;
@@ -25,8 +25,114 @@
   --radius: 16px;
   --toolbar-h: 56px;
   --transition: 0.2s ease;
+  --tile-border: none;
+  --weather-bg: #1b2d4a;
+  --chart-line: #4fc3f7;
+  --chart-bar-hi: #1565c0;
+  --chart-bar-lo: #4fc3f7;
+  --chart-label: #eaeaea;
+  --chart-label-dim: #8892a4;
+  --chart-sunrise: #ffd369;
+  --chart-sunset: #ff9800;
+  --slider-track: rgba(255, 255, 255, 0.18);
+  --input-bg: rgba(255, 255, 255, 0.05);
+  --input-border: rgba(255, 255, 255, 0.1);
+  --edit-outline: rgba(255, 255, 255, 0.15);
+  --icon-picker-bg: rgba(0, 0, 0, 0.15);
+  --icon-picker-border: rgba(255, 255, 255, 0.08);
+  --hover-overlay: rgba(255, 255, 255, 0.08);
+  --tab-active-bg: rgba(83, 126, 197, 0.2);
+  --day-bg: rgba(255, 255, 255, 0.05);
 
   color-scheme: dark;
+}
+
+/* ---------- Light theme ---------- */
+[data-theme="light"] {
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --surface-hover: #e8eaed;
+  --tile-on: #bfdbfe;
+  --tile-off: #e5e7eb;
+  --accent: #dc2626;
+  --primary: #2563eb;
+  --text: #1f2937;
+  --text-dim: #6b7280;
+  --icon-on: #d97706;
+  --icon-off: #9ca3af;
+  --tile-border: none;
+  --weather-bg: #e0ecf8;
+  --chart-line: #2563eb;
+  --chart-bar-hi: #1e40af;
+  --chart-bar-lo: #60a5fa;
+  --chart-label: #1f2937;
+  --chart-label-dim: #6b7280;
+  --chart-sunrise: #d97706;
+  --chart-sunset: #ea580c;
+  --slider-track: rgba(0, 0, 0, 0.12);
+  --input-bg: rgba(0, 0, 0, 0.03);
+  --input-border: rgba(0, 0, 0, 0.15);
+  --edit-outline: rgba(0, 0, 0, 0.15);
+  --icon-picker-bg: rgba(0, 0, 0, 0.04);
+  --icon-picker-border: rgba(0, 0, 0, 0.1);
+  --hover-overlay: rgba(0, 0, 0, 0.05);
+  --tab-active-bg: rgba(37, 99, 235, 0.12);
+  --day-bg: rgba(0, 0, 0, 0.04);
+
+  color-scheme: light;
+}
+
+/* ---------- E-Ink theme ---------- */
+[data-theme="eink"] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f5f5f5;
+  --tile-on: #e0e0e0;
+  --tile-off: #f0f0f0;
+  --accent: #cc0000;
+  --primary: #0044cc;
+  --text: #000000;
+  --text-dim: #555555;
+  --icon-on: #d97706;
+  --icon-off: #888888;
+  --radius: 4px;
+  --transition: 0s;
+  --tile-border: 1px solid #000000;
+  --weather-bg: #f5f5f5;
+  --chart-line: #000000;
+  --chart-bar-hi: #333333;
+  --chart-bar-lo: #888888;
+  --chart-label: #000000;
+  --chart-label-dim: #555555;
+  --chart-sunrise: #cc8800;
+  --chart-sunset: #cc5500;
+  --slider-track: rgba(0, 0, 0, 0.2);
+  --input-bg: #f5f5f5;
+  --input-border: #000000;
+  --edit-outline: rgba(0, 0, 0, 0.3);
+  --icon-picker-bg: #f5f5f5;
+  --icon-picker-border: #000000;
+  --hover-overlay: transparent;
+  --tab-active-bg: rgba(0, 68, 204, 0.15);
+  --day-bg: #f0f0f0;
+
+  color-scheme: light;
+}
+
+/* E-Ink: kill all shadows and hover effects */
+[data-theme="eink"] * {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+[data-theme="eink"] .grid-stack-item-content:hover,
+[data-theme="eink"] .grid-stack-item-content:active {
+  background: inherit;
+}
+
+[data-theme="eink"] .btn:hover,
+[data-theme="eink"] .fab:hover {
+  transform: none;
 }
 
 html, body {
@@ -51,7 +157,7 @@ html, body {
   justify-content: space-between;
   padding: 0 16px;
   background: var(--surface);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--input-border);
   z-index: 100;
   transition: transform var(--transition);
 }
@@ -81,13 +187,13 @@ html, body {
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-overlay);
   color: var(--text);
   transition: background var(--transition);
 }
 
 .btn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--hover-overlay);
 }
 
 .btn--primary {
@@ -156,6 +262,7 @@ html, body {
 
 .grid-stack-item-content {
   border-radius: var(--radius);
+  border: var(--tile-border);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -184,7 +291,7 @@ html, body {
 }
 
 .tile--on .grid-stack-item-content:hover {
-  background: #123d6e;
+  background: var(--surface-hover);
 }
 
 /* Active press feedback */
@@ -193,7 +300,7 @@ html, body {
 }
 
 .tile--on .grid-stack-item-content:active {
-  background: #0d2e50;
+  background: var(--surface);
 }
 
 /* Tile icon — scales with the smaller of width (30cqi) or height (42cqb) so the
@@ -348,9 +455,9 @@ html, body {
   width: 100%;
   margin-top: 4px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--input-bg);
   color: var(--text);
   font-size: 0.95rem;
 }
@@ -384,7 +491,7 @@ html, body {
   height: 4px;
   appearance: none;
   -webkit-appearance: none;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--slider-track);
   border-radius: 2px;
   outline: none;
   cursor: pointer;
@@ -460,7 +567,7 @@ html, body {
   height: 4px;
   appearance: none;
   -webkit-appearance: none;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--slider-track);
   border-radius: 2px;
   outline: none;
   border: none;
@@ -532,7 +639,7 @@ html, body {
   height: 4px;
   appearance: none;
   -webkit-appearance: none;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--slider-track);
   border-radius: 2px;
   outline: none;
   border: none;
@@ -581,10 +688,10 @@ html, body {
   gap: 4px;
   margin-top: 6px;
   margin-bottom: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--icon-picker-border);
   border-radius: 8px;
   padding: 6px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--icon-picker-bg);
 }
 
 .icon-picker__item {
@@ -605,12 +712,12 @@ html, body {
 }
 
 .icon-picker__item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-overlay);
   color: var(--text);
 }
 
 .icon-picker__item--selected {
-  background: rgba(83, 126, 197, 0.25);
+  background: var(--tab-active-bg);
   color: var(--text);
 }
 
@@ -628,12 +735,12 @@ html, body {
   justify-content: flex-start;
   cursor: default;
   padding: 12px;
-  background: #1b2d4a;
+  background: var(--weather-bg);
 }
 
 .tile--weather .grid-stack-item-content:hover,
 .tile--weather .grid-stack-item-content:active {
-  background: #1b2d4a; /* static — no press effect */
+  background: var(--weather-bg); /* static — no press effect */
 }
 
 /* Container — fills the content div; container queries target this */
@@ -704,7 +811,7 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--day-bg);
   border-radius: 8px;
   padding: 6px 4px;
   gap: 3px;
@@ -767,7 +874,7 @@ html, body {
   display: flex;
   gap: 2px;
   margin-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--icon-picker-border);
   padding-bottom: 12px;
 }
 
@@ -784,12 +891,12 @@ html, body {
 }
 
 .modal__tab:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-overlay);
   color: var(--text);
 }
 
 .modal__tab--active {
-  background: rgba(83, 126, 197, 0.2);
+  background: var(--tab-active-bg);
   color: var(--primary);
 }
 
@@ -805,12 +912,12 @@ html, body {
   justify-content: stretch;
   cursor: default;
   padding: 4px 6px;
-  background: #1b2d4a;
+  background: var(--weather-bg);
 }
 
 .tile--chart .grid-stack-item-content:hover,
 .tile--chart .grid-stack-item-content:active {
-  background: #1b2d4a; /* static — no press effect */
+  background: var(--weather-bg); /* static — no press effect */
 }
 
 /* Chart fills the entire content div — no label text displayed on tile */
@@ -840,12 +947,12 @@ html, body {
 
 /* ---------- Edit-mode grid visual hints ---------- */
 .dashboard--editing .grid-stack-item-content {
-  outline: 2px dashed rgba(255, 255, 255, 0.15);
+  outline: 2px dashed var(--edit-outline);
 }
 
 /* GridStack placeholder styling */
 .grid-stack-placeholder > .placeholder-content {
   border: 2px dashed var(--primary) !important;
   border-radius: var(--radius);
-  background: rgba(83, 126, 197, 0.1) !important;
+  background: var(--tab-active-bg) !important;
 }

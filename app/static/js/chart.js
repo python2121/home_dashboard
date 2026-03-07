@@ -19,6 +19,10 @@ const ForecastChartTiles = (() => {
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
   function escapeHTML(str) {
     const div = document.createElement("div");
     div.textContent = str;
@@ -50,7 +54,7 @@ const ForecastChartTiles = (() => {
     const t = svgEl("text", {
       x, y,
       "font-size":   opts.size    || 4,
-      "fill":        opts.fill    || "#8892a4",
+      "fill":        opts.fill    || cssVar("--chart-label-dim"),
       "text-anchor": opts.anchor  || "middle",
       ...(opts.family ? { "font-family": opts.family } : {}),
     });
@@ -107,14 +111,14 @@ const ForecastChartTiles = (() => {
         y:      (31 - h).toFixed(2),
         width:  (barW - 0.4).toFixed(2),
         height: h.toFixed(2),
-        fill:   prob > 0.5 ? "#1565c0" : "#4fc3f7",
+        fill:   prob > 0.5 ? cssVar("--chart-bar-hi") : cssVar("--chart-bar-lo"),
       }));
     }
 
     // Baseline
     svg.appendChild(svgEl("line", {
       x1: 0, y1: 31.5, x2: 200, y2: 31.5,
-      stroke: "#8892a4", "stroke-width": 0.3,
+      stroke: cssVar("--chart-label-dim"), "stroke-width": 0.3,
     }));
 
     // X-axis labels
@@ -158,8 +162,8 @@ const ForecastChartTiles = (() => {
       const endMin   = isoToMinutes(points[n - 1].iso);
       const xSpan    = xFor(n - 1) - xFor(0);
       for (const { iso, color } of [
-        { iso: data.sunrise_iso, color: "#ffd369" },
-        { iso: data.sunset_iso,  color: "#ff9800" },
+        { iso: data.sunrise_iso, color: cssVar("--chart-sunrise") },
+        { iso: data.sunset_iso,  color: cssVar("--chart-sunset") },
       ]) {
         if (!iso) continue;
         const m = isoToMinutes(iso);
@@ -176,14 +180,14 @@ const ForecastChartTiles = (() => {
     // Baseline
     svg.appendChild(svgEl("line", {
       x1: 0, y1: 31.5, x2: 200, y2: 31.5,
-      stroke: "#8892a4", "stroke-width": 0.3,
+      stroke: cssVar("--chart-label-dim"), "stroke-width": 0.3,
     }));
 
     // Polyline
     const ptStr = points.map((p, i) => `${xFor(i).toFixed(1)},${yFor(p.temp).toFixed(1)}`).join(" ");
     svg.appendChild(svgEl("polyline", {
       points: ptStr,
-      fill: "none", stroke: "#4fc3f7",
+      fill: "none", stroke: cssVar("--chart-line"),
       "stroke-width": 1.5, "stroke-linejoin": "round", "stroke-linecap": "round",
     }));
 
@@ -193,10 +197,10 @@ const ForecastChartTiles = (() => {
       const y = yFor(points[i].temp);
 
       svg.appendChild(svgEl("circle", {
-        cx: x.toFixed(1), cy: y.toFixed(1), r: 1.5, fill: "#4fc3f7",
+        cx: x.toFixed(1), cy: y.toFixed(1), r: 1.5, fill: cssVar("--chart-line"),
       }));
       svg.appendChild(svgText(x.toFixed(1), Math.max(4, y - 3).toFixed(1),
-        String(points[i].temp), { size: 4.5, fill: "#eaeaea" }));
+        String(points[i].temp), { size: 4.5, fill: cssVar("--chart-label") }));
       svg.appendChild(svgText(x.toFixed(1), 38,
         isoToShortTime(points[i].iso)));
     }
@@ -323,5 +327,5 @@ const ForecastChartTiles = (() => {
   }
 
   // ── Public API ───────────────────────────────────────────────────────
-  return { addForecastChartTileToGrid, populateForEdit, initModal, startRefreshTimer };
+  return { addForecastChartTileToGrid, populateForEdit, initModal, startRefreshTimer, refreshTile };
 })();

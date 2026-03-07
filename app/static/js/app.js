@@ -33,6 +33,7 @@ const DashboardApp = (() => {
   const modal      = $("#add-tile-modal");
   const addForm    = $("#add-tile-form");
   const statusDot  = $("#status-indicator");
+  const themeSelect = $("#theme-select");
 
   // ── Icon picker ───────────────────────────────────────────────────
 
@@ -362,6 +363,35 @@ const DashboardApp = (() => {
     }
   }
 
+  // ── Theme switching ────────────────────────────────────────────────
+
+  function applyTheme(theme) {
+    if (theme) {
+      document.documentElement.dataset.theme = theme;
+    } else {
+      delete document.documentElement.dataset.theme;
+    }
+    // Re-render all chart tiles so SVG colors match the new theme
+    if (typeof ForecastChartTiles !== "undefined") {
+      for (const el of document.querySelectorAll('.grid-stack-item[data-tile-type="forecast_chart"]')) {
+        ForecastChartTiles.refreshTile(el);
+      }
+    }
+  }
+
+  function initTheme() {
+    const saved = localStorage.getItem("dashboard-theme") || "";
+    applyTheme(saved);
+    if (themeSelect) {
+      themeSelect.value = saved;
+      themeSelect.addEventListener("change", () => {
+        const val = themeSelect.value;
+        localStorage.setItem("dashboard-theme", val);
+        applyTheme(val);
+      });
+    }
+  }
+
   // ── Edit mode ──────────────────────────────────────────────────────
 
   function enterEditMode() {
@@ -670,6 +700,8 @@ const DashboardApp = (() => {
       staticGrid: true,
       minH: 1,
     });
+
+    initTheme();
 
     dashboard.addEventListener("click", handleTileClick);
     dashboard.addEventListener("input", handleBrightnessInput);
