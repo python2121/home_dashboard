@@ -64,8 +64,12 @@ const WeatherTiles = (() => {
       const date = new Date(`${day.date}T12:00:00`);
       const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
       const dayEl = document.createElement("div");
-      // Days 4 and 5 (index ≥ 3) are hidden by default; CSS reveals them at wider widths
-      dayEl.className = idx >= 3 ? "weather-day weather-day--extra" : "weather-day";
+      // Days 4–5 (index 3–4) hidden by default, revealed at 3+ columns wide
+      // Day 6 (index 5) revealed at 4+ columns wide
+      let cls = "weather-day";
+      if (idx >= 5) cls += " weather-day--wide";
+      else if (idx >= 3) cls += " weather-day--extra";
+      dayEl.className = cls;
       dayEl.innerHTML = `
         <div class="weather-day-date">${escapeHTML(dayName)}</div>
         <i class="mdi ${escapeHTML(day.icon)} weather-day-icon"></i>

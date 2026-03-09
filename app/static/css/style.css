@@ -862,6 +862,15 @@ html, body {
   .weather-day--extra { display: flex; }
 }
 
+/* 6th forecast day revealed at 4+ columns wide */
+.weather-day--wide {
+  display: none;
+}
+
+@container weather (min-width: 400px) {
+  .weather-day--wide { display: flex; }
+}
+
 /* Larger icons when there's plenty of room */
 @container weather (min-height: 360px) {
   .weather-icon { font-size: 4.5rem; }

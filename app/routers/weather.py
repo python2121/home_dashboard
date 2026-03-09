@@ -96,14 +96,14 @@ async def _geocode(zip_code: str, country_code: str) -> Tuple[float, float]:
 
 
 async def _fetch_weather(lat: float, lon: float, unit: str) -> Dict[str, Any]:
-    """Fetch current conditions and 6-day forecast from Open-Meteo."""
+    """Fetch current conditions and 7-day forecast from Open-Meteo."""
     params = {
         "latitude": lat,
         "longitude": lon,
         "current": "temperature_2m,weather_code",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min",
         "temperature_unit": unit,
-        "forecast_days": 6,
+        "forecast_days": 7,
         "timezone": "auto",
     }
     try:
@@ -129,7 +129,7 @@ def _build_response(raw: Dict[str, Any], unit: str) -> Dict[str, Any]:
     unit_symbol = "\u00b0F" if unit == "fahrenheit" else "\u00b0C"
 
     forecast: List[Dict[str, Any]] = []
-    for i in range(1, 6):  # indices 1–5 → tomorrow + next 4 days (5-day forecast)
+    for i in range(1, 7):  # indices 1–6 → tomorrow + next 5 days (6-day forecast)
         code = int(daily["weather_code"][i])
         desc, icon = _wmo_info(code)
         forecast.append(
