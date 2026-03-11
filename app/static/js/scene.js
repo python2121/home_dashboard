@@ -200,7 +200,11 @@ const SceneTiles = (() => {
     content.innerHTML = buildTileHTML(tile);
     el.appendChild(content);
 
-    grid.addWidget(el, { x: tile.x, y: tile.y, w: tile.w, h: tile.h });
+    el.setAttribute("gs-x", tile.x);
+    el.setAttribute("gs-y", tile.y);
+    el.setAttribute("gs-w", tile.w);
+    el.setAttribute("gs-h", tile.h);
+    grid.addWidget(el);
   }
 
   // ── Modal wiring ─────────────────────────────────────────────────────
@@ -390,26 +394,24 @@ const SceneTiles = (() => {
   function initModal(getEntityStates) {
     _getEntityStates = getEntityStates;
 
-    const tabs     = document.querySelectorAll(".modal__tab");
+    const typeSelect = document.getElementById("tile-type-select");
     const sections = {
       entity:  document.getElementById("entity-form-section"),
       scene:   document.getElementById("scene-form-section"),
       weather: document.getElementById("weather-form-section"),
       chart:   document.getElementById("chart-form-section"),
+      moon:    document.getElementById("moon-form-section"),
+      clock:   document.getElementById("clock-form-section"),
     };
 
-    // Tab switching — owns all three tabs
-    for (const tab of tabs) {
-      tab.addEventListener("click", () => {
-        tabs.forEach((t) => t.classList.remove("modal__tab--active"));
-        tab.classList.add("modal__tab--active");
-        const active = tab.dataset.tab;
-        for (const [name, el] of Object.entries(sections)) {
-          el.classList.toggle("section--hidden", name !== active);
-        }
-        if (active === "scene") populateSceneEntityList();
-      });
-    }
+    // Tile type switching via dropdown
+    typeSelect.addEventListener("change", () => {
+      const active = typeSelect.value;
+      for (const [name, el] of Object.entries(sections)) {
+        el.classList.toggle("section--hidden", name !== active);
+      }
+      if (active === "scene") populateSceneEntityList();
+    });
 
     // Step navigation
     document.getElementById("btn-scene-next").addEventListener("click", goToStep2);

@@ -6,6 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <title>Home Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
 
   <!-- GridStack -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack.min.css" />
@@ -59,12 +60,19 @@
     <div class="modal__content">
       <h2>Add Tile</h2>
 
-      <!-- Tab switcher -->
+      <!-- Tile type selector -->
       <div class="modal__tabs">
-        <button class="modal__tab modal__tab--active" data-tab="entity">Entity</button>
-        <button class="modal__tab" data-tab="scene">Scene</button>
-        <button class="modal__tab" data-tab="weather">Weather</button>
-        <button class="modal__tab" data-tab="chart">Chart</button>
+        <label class="modal__type-label">
+          Tile Type
+          <select id="tile-type-select" class="modal__type-select">
+            <option value="entity">Entity</option>
+            <option value="scene">Scene</option>
+            <option value="clock">Clock</option>
+            <option value="weather">Weather</option>
+            <option value="chart">Rain Chart</option>
+            <option value="moon">Moon</option>
+          </select>
+        </label>
       </div>
 
       <!-- Entity form -->
@@ -195,6 +203,53 @@
         </form>
       </div>
 
+      <!-- Moon form -->
+      <div id="moon-form-section" class="section--hidden">
+        <form id="add-moon-form">
+          <label>
+            Label
+            <input id="moon-label" type="text" placeholder="e.g. Moon Phase" />
+          </label>
+          <label>
+            ZIP / Postal Code
+            <input id="moon-zip" type="text" required placeholder="e.g. 10001" />
+          </label>
+          <label>
+            Country Code
+            <input id="moon-country" type="text" value="US" placeholder="US" maxlength="4" />
+          </label>
+          <div class="modal__actions">
+            <button type="button" id="btn-cancel-moon" class="btn">Cancel</button>
+            <button type="submit" class="btn btn--primary">Add</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Clock form -->
+      <div id="clock-form-section" class="section--hidden">
+        <form id="add-clock-form">
+          <label>
+            Label
+            <input id="clock-label" type="text" placeholder="e.g. Kitchen Clock" />
+          </label>
+          <label>
+            Time Format
+            <select id="clock-24h">
+              <option value="false">12-hour (1:30 PM)</option>
+              <option value="true">24-hour (13:30)</option>
+            </select>
+          </label>
+          <label class="checkbox-row">
+            <input id="clock-seconds" type="checkbox" />
+            Show seconds
+          </label>
+          <div class="modal__actions">
+            <button type="button" id="btn-cancel-clock" class="btn">Cancel</button>
+            <button type="submit" class="btn btn--primary">Add</button>
+          </div>
+        </form>
+      </div>
+
     </div>
   </div>
 
@@ -209,6 +264,12 @@
 
   <!-- Forecast chart tile JS (must load before app.js) -->
   <script src="/static/js/chart.js"></script>
+
+  <!-- Moon phase tile JS (must load before app.js) -->
+  <script src="/static/js/moon.js"></script>
+
+  <!-- Clock tile JS (must load before app.js) -->
+  <script src="/static/js/clock.js"></script>
 
   <!-- App JS -->
   <script src="/static/js/app.js"></script>

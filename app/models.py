@@ -76,6 +76,34 @@ class SceneTile(BaseModel):
         return data
 
 
+class ClockTile(BaseModel):
+    """A dashboard tile displaying the current time, date, and day of week."""
+
+    tile_type: Literal["clock"] = "clock"
+    id: str = Field(description="Unique tile identifier")
+    label: str = Field(default="Clock", description="Display label shown on the tile")
+    format_24h: bool = Field(default=False, description="Use 24-hour format")
+    show_seconds: bool = Field(default=False, description="Display seconds")
+    x: int = Field(default=0, ge=0, description="Grid column position")
+    y: int = Field(default=0, ge=0, description="Grid row position")
+    w: int = Field(default=2, ge=1, description="Width in grid units")
+    h: int = Field(default=2, ge=1, description="Height in grid units")
+
+
+class MoonTile(BaseModel):
+    """A dashboard tile showing lunar phase, illumination, and rise/set times."""
+
+    tile_type: Literal["moon"] = "moon"
+    id: str = Field(description="Unique tile identifier")
+    label: str = Field(default="Moon", description="Display label shown on the tile")
+    zip_code: str = Field(description="ZIP / postal code for moonrise/set times")
+    country_code: str = Field(default="US", description="ISO 3166-1 alpha-2 country code")
+    x: int = Field(default=0, ge=0, description="Grid column position")
+    y: int = Field(default=0, ge=0, description="Grid row position")
+    w: int = Field(default=2, ge=1, description="Width in grid units")
+    h: int = Field(default=2, ge=1, description="Height in grid units")
+
+
 class ForecastChartTile(BaseModel):
     """A dashboard tile showing a rain or temperature chart for a ZIP code."""
 
@@ -95,7 +123,7 @@ class ForecastChartTile(BaseModel):
 
 # Discriminated union — tile_type field selects the concrete model.
 AnyTile = Annotated[
-    Union[EntityTile, WeatherTile, SceneTile, ForecastChartTile],
+    Union[EntityTile, WeatherTile, SceneTile, ForecastChartTile, MoonTile, ClockTile],
     Field(discriminator="tile_type"),
 ]
 

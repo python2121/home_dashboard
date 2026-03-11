@@ -22,7 +22,7 @@ The UI consists of resizable, repositionable tiles with rounded corners that sna
 
 ## Tile Types
 
-There are four tile types, stored as a discriminated union (`tile_type` field):
+There are six tile types, stored as a discriminated union (`tile_type` field):
 
 ### EntityTile (`tile_type: "entity"`)
 Controls a single Home Assistant entity (light, switch, fan, cover, lock, climate, media_player). Tapping toggles on/off. Lights show a brightness slider when on. Can display an optional badge from a related sensor (e.g., filter life percentage).
@@ -35,6 +35,12 @@ Controls a group of lights, each at its own brightness level. Tapping activates 
 
 ### ForecastChartTile (`tile_type: "forecast_chart"`)
 Displays an SVG chart — either rain probability bars (next 60 minutes from Pirate Weather) or a temperature curve (next 12 hours from Open-Meteo). Mode is auto-selected: rain if any minute has >10% precipitation probability, otherwise temperature. Always enforced to h=1 (single grid row). Refreshes every 5 minutes.
+
+### MoonTile (`tile_type: "moon"`)
+Displays lunar phase name, illumination percentage, moon age, and moonrise/moonset/transit times with relative descriptions. Uses Farmsense API (phase/illumination/age) and US Naval Observatory API (rise/set/transit). ZIP code required for location-based times. SVG moon rendering with shadow overlay computed from illumination fraction and phase direction. Data refreshes every 1 hour.
+
+### ClockTile (`tile_type: "clock"`)
+Displays current time, date, and day of week. Pure frontend — no backend route needed. Configurable 24-hour format and optional seconds display. Updates every second via `setInterval`. Scales responsively: 1x1 shows time only, larger sizes add full date. Uses `Intl.DateTimeFormat` for locale-aware formatting.
 
 ## Home Assistant Integration
 
@@ -82,14 +88,17 @@ home_dashboard/
 │   ├── routers/
 │   │   ├── ha_proxy.py    # /api/ha/* proxy routes to Home Assistant
 │   │   ├── layout.py      # /api/layout — tile layout persistence (atomic writes)
-│   │   └── weather.py     # /api/weather — Open-Meteo forecast + Pirate Weather rain + caching
+│   │   ├── weather.py     # /api/weather — Open-Meteo forecast + Pirate Weather rain + caching
+│   │   └── moon.py        # /api/moon — Farmsense moon phase + USNO rise/set/transit + caching
 │   ├── static/
 │   │   ├── css/style.css  # Dark/light/e-ink themes, container queries, 959 lines
 │   │   └── js/
 │   │       ├── app.js     # Main module: GridStack grid, edit mode, state polling, entity tiles
 │   │       ├── scene.js   # SceneTiles module: scene builder UI, state tracking, overlapping scene logic
 │   │       ├── weather.js # WeatherTiles module: rendering, 30-min refresh timer
-│   │       └── chart.js   # ForecastChartTiles module: SVG rain bars / temp curve, 5-min refresh
+│   │       ├── chart.js   # ForecastChartTiles module: SVG rain bars / temp curve, 5-min refresh
+│   │       ├── moon.js    # MoonTiles module: SVG moon rendering, Farmsense + USNO data, 1-hr refresh
+│   │       └── clock.js   # ClockTiles module: time/date display, 1-second interval, no backend
 │   └── templates/
 │       └── index.html     # Jinja2 shell — loads GridStack + MDI from CDN, multi-tab add-tile modal
 ├── tests/
@@ -130,12 +139,17 @@ home_dashboard/
 - `GET /api/weather?zip_code=...&country_code=US&unit=fahrenheit` — Current conditions + 5-day forecast. Geocoding via Nominatim, forecast via Open-Meteo. 30-minute cache.
 - `GET /api/weather/chart?zip_code=...&country_code=US&unit=fahrenheit` — Returns rain bars or temp curve. Rain mode uses Pirate Weather (requires `PIRATE_WEATHER_KEY`); temp mode uses Open-Meteo. 5-minute cache.
 
+### Moon Data (`/api/moon`)
+- `GET /api/moon?zip_code=...&country_code=US` — Moon phase, illumination, age, moonrise/moonset/transit times. Uses Farmsense (phase data) and US Naval Observatory (rise/set times). 1-hour cache. USNO failures degrade gracefully (returns phase data without times).
+
 ## Data Models (`app/models.py`)
 
 - **EntityTile** — `id, entity_id, label, icon, domain, badge_entity (optional), x, y, w, h`
 - **WeatherTile** — `id, label, zip_code, country_code, unit, x, y, w, h`
 - **SceneTile** — `id, label, icon, members: List[SceneMember{entity_id, brightness}], x, y, w, h`. Has backward-compat migration from old `entity_ids + brightness` format.
 - **ForecastChartTile** — `id, label, zip_code, country_code, unit, x, y, w, h`
+- **MoonTile** — `id, label, zip_code, country_code, x, y, w, h`
+- **ClockTile** — `id, label, format_24h, show_seconds, x, y, w, h`
 - **Layout** — `columns (default 12), tiles: List[AnyTile]` (discriminated union). Validator injects `tile_type="entity"` for old layouts missing the field.
 - **ServiceCall** — `entity_id, extra: Optional[Dict]` (extra cannot override entity_id)
 - **SceneToggle** — `members: List[SceneMember], action: "on"|"off"`
@@ -170,7 +184,7 @@ Three themes stored in localStorage (`dashboard-theme`), selectable in edit mode
 Theme changes re-render all ForecastChartTiles (SVG colors read from CSS variables).
 
 ### Add Tile Modal
-Multi-tab modal with four tabs: Entity, Scene, Weather, Chart. Each tab has its own form fields. The modal supports both "add new" and "edit existing" modes.
+Multi-tab modal with six tabs: Entity, Scene, Weather, Chart, Moon, Clock. Each tab has its own form fields. The modal supports both "add new" and "edit existing" modes.
 
 ### Scene Builder
 Two-step UI in the Scene tab:
@@ -181,7 +195,7 @@ Two-step UI in the Scene tab:
 80+ Material Design Icons organized in a scrollable grid. Includes lights, lamps, switches, fans, home, doors, and furniture icons.
 
 ### JS Module Load Order
-`scene.js` → `weather.js` → `chart.js` → `app.js` (app.js depends on all other modules being defined)
+`scene.js` → `weather.js` → `chart.js` → `moon.js` → `clock.js` → `app.js` (app.js depends on all other modules being defined)
 
 ## CSS Architecture (`app/static/css/style.css`)
 
@@ -264,7 +278,8 @@ Dev machine runs Python 3.9.6; Docker image uses Python 3.11. Pydantic models mu
 
 - **Weather data**: 30-minute in-memory cache keyed by `(zip_code, country_code, unit)`
 - **Chart data**: 5-minute in-memory cache keyed by `(zip_code, country_code, unit)`
-- Both caches are cleared between tests via a conftest fixture
+- **Moon data**: 1-hour in-memory cache keyed by `(zip_code, country_code)`
+- All caches are cleared between tests via conftest fixtures
 
 ## Backward Compatibility
 
@@ -279,192 +294,7 @@ Every plan below follows the exact conventions visible in the codebase: Pydantic
 
 ---
 
-### 1. Clock / Date Tile (`tile_type: "clock"`)
-
-**What it does**: Displays current time, date, and optionally day-of-week. Universal on wall-mounted dashboards. Pure frontend — no backend route needed.
-
-**Scaling behavior**:
-- 1×1: Time only (e.g., "2:45")
-- 2×1: Time + AM/PM
-- 2×2: Large time + full date ("Friday, March 6")
-- 4×2: Giant clock with seconds + date + day-of-week
-
-**Implementation plan**:
-
-**Step 1 — Model** (`app/models.py`):
-- Add `ClockTile(BaseModel)` following the `WeatherTile` pattern (no entity_id, display-only):
-  ```python
-  class ClockTile(BaseModel):
-      tile_type: Literal["clock"] = "clock"
-      id: str = Field(description="Unique tile identifier")
-      label: str = Field(default="Clock", description="Display label shown on the tile")
-      format_24h: bool = Field(default=False, description="Use 24-hour format")
-      show_seconds: bool = Field(default=False, description="Display seconds")
-      x: int = Field(default=0, ge=0)
-      y: int = Field(default=0, ge=0)
-      w: int = Field(default=2, ge=1)
-      h: int = Field(default=2, ge=1)
-  ```
-- Add `ClockTile` to the `AnyTile` union: `Union[EntityTile, WeatherTile, SceneTile, ForecastChartTile, ClockTile]`
-- No new `model_validator` needed — old layouts without clock tiles are unaffected
-
-**Step 2 — Frontend JS** (`app/static/js/clock.js` — new file):
-- Create `ClockTiles` IIFE following the `WeatherTiles` pattern (weather.js):
-  - `escapeHTML(str)` — same textContent trick used in every module
-  - `buildTileHTML(tile)` — returns edit/remove buttons (matching `tile__edit` / `tile__remove` classes exactly) + clock container:
-    ```html
-    <button class="tile__edit" data-tile-id="${safeId}" title="Edit tile">
-      <i class="mdi mdi-pencil"></i>
-    </button>
-    <button class="tile__remove" data-tile-id="${safeId}" title="Remove tile">
-      <i class="mdi mdi-close"></i>
-    </button>
-    <div class="clock-tile">
-      <div class="clock-time">--:--</div>
-      <div class="clock-date"></div>
-    </div>
-    ```
-  - `renderTime(gridItem)` — reads `dataset.format24h`, `dataset.showSeconds`, formats via `Intl.DateTimeFormat` with appropriate options, updates `.clock-time` text and `.clock-date` text (e.g., "Friday, March 6")
-  - `startClock()` — single `setInterval(1000)` that calls `renderTime()` on every `[data-tile-type="clock"]` element. Only one interval regardless of tile count.
-  - `addClockTileToGrid(tile, grid)` — following the exact `addWeatherTileToGrid` pattern:
-    ```javascript
-    function addClockTileToGrid(tile, grid) {
-      const el = document.createElement("div");
-      el.className = "tile--clock";
-      el.dataset.tileType    = "clock";
-      el.dataset.tileId      = tile.id;
-      el.dataset.label       = tile.label || "Clock";
-      el.dataset.format24h   = tile.format_24h ? "true" : "false";
-      el.dataset.showSeconds = tile.show_seconds ? "true" : "false";
-
-      const content = document.createElement("div");
-      content.className = "grid-stack-item-content";
-      content.innerHTML = buildTileHTML(tile);
-      el.appendChild(content);
-
-      grid.addWidget(el, { x: tile.x, y: tile.y, w: tile.w, h: tile.h });
-      renderTime(el); // immediate render, don't wait for interval
-    }
-    ```
-  - `populateForEdit(tileEl)` — pre-fills form fields from dataset (matching `ForecastChartTiles.populateForEdit` pattern)
-  - `initModal()` — handles form submit following the `WeatherTiles.initModal()` pattern: read form values, check for `DashboardApp.getEditingTile()` to decide add vs. update, call `addClockTileToGrid` or update dataset attrs, call `DashboardApp.closeAddModal()`
-  - Public API: `{ addClockTileToGrid, populateForEdit, initModal, startClock }`
-
-**Step 3 — CSS** (`app/static/css/style.css`):
-- Add theme variable `--clock-bg` to each theme block (dark: `#1b2040`, light: `#e8edf5`, eink: `#f5f5f5`) — subtle tint like `--weather-bg`
-- Add clock tile styles:
-  ```css
-  .clock-tile {
-    container-name: clock;
-    container-type: size;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    background: var(--clock-bg);
-    color: var(--text);
-    gap: 4px;
-  }
-  .clock-time {
-    font-size: max(1.5rem, min(45cqi, 60cqb));
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-    color: var(--text);
-  }
-  .clock-date {
-    font-size: max(0.5rem, min(12cqi, 16cqb));
-    color: var(--text-dim);
-    text-align: center;
-  }
-  @container clock (max-height: 80px) {
-    .clock-date { display: none; }
-  }
-  @container clock (max-width: 100px) {
-    .clock-time { font-size: max(1rem, min(35cqi, 50cqb)); }
-  }
-  ```
-- Tile container inherits existing `.grid-stack-item-content` border-radius and padding
-
-**Step 4 — Modal HTML** (`app/templates/index.html`):
-- Add `"clock"` button to `.modal__tabs` div (after the "Chart" tab):
-  ```html
-  <button class="modal__tab" data-tab="clock">Clock</button>
-  ```
-- Add clock form section (after `chart-form-section`):
-  ```html
-  <div id="clock-form-section" class="section--hidden">
-    <form id="add-clock-form">
-      <label>
-        Label
-        <input id="clock-label" type="text" placeholder="e.g. Kitchen Clock" />
-      </label>
-      <label class="checkbox-row">
-        <input id="clock-24h" type="checkbox" />
-        24-hour format
-      </label>
-      <label class="checkbox-row">
-        <input id="clock-seconds" type="checkbox" />
-        Show seconds
-      </label>
-      <div class="modal__actions">
-        <button type="button" id="btn-cancel-clock" class="btn">Cancel</button>
-        <button type="submit" class="btn btn--primary">Add</button>
-      </div>
-    </form>
-  </div>
-  ```
-- Add `<script src="/static/js/clock.js"></script>` between chart.js and app.js
-
-**Step 5 — Wire into app.js**:
-- In `addTileToGrid(tile)`: add case before the entity fallback:
-  ```javascript
-  if (tile.tile_type === "clock") {
-    ClockTiles.addClockTileToGrid(tile, grid);
-    return;
-  }
-  ```
-- In `serializeLayout()`: add clock case to the serialization switch:
-  ```javascript
-  } else if (tileType === "clock") {
-    tiles.push({
-      ...base,
-      label:        d.label,
-      format_24h:   d.format24h === "true",
-      show_seconds: d.showSeconds === "true",
-    });
-  ```
-- In `refreshTileStates()`: add `if (type === "clock") continue;` (display-only, no HA state)
-- In `handleTileClick()`: add `if (type === "clock") return;` (display-only, no toggle)
-- In `activateTab()`: add `document.getElementById("clock-form-section").classList.toggle("section--hidden", tabName !== "clock");`
-- In `openEditModal()`: add clock branch:
-  ```javascript
-  } else if (type === "clock") {
-    activateTab("clock");
-    ClockTiles.populateForEdit(tileEl);
-    document.querySelector("#add-clock-form button[type='submit']").textContent = "Save";
-  }
-  ```
-- In `closeAddModal()`: reset clock form and restore button text:
-  ```javascript
-  const clockForm = document.getElementById("add-clock-form");
-  if (clockForm) clockForm.reset();
-  const clockSubmit = document.querySelector("#add-clock-form button[type='submit']");
-  if (clockSubmit) clockSubmit.textContent = "Add";
-  ```
-- In `init()`: call `ClockTiles.initModal()` and `ClockTiles.startClock()`
-
-**Step 6 — Tests**:
-- No backend route, so model-only tests. Add to existing test file or create `tests/test_models.py`:
-  - `test_clock_tile_defaults()` — verify `format_24h=False`, `show_seconds=False`, `w=2`, `h=2`
-  - `test_clock_tile_in_layout()` — round-trip: create Layout with a ClockTile, serialize, deserialize, assert fields match
-  - `test_clock_tile_discriminator()` — verify `tile_type="clock"` round-trips through the `AnyTile` union
-
----
-
-### 2. Calendar / Agenda Tile (`tile_type: "calendar"`)
+### 1. Calendar / Agenda Tile (`tile_type: "calendar"`)
 
 **What it does**: Shows upcoming events from Home Assistant's calendar integration (Google Calendar, CalDAV, local). Common on kitchen/hallway dashboards. Read-only display — no toggles.
 
@@ -666,7 +496,7 @@ Every plan below follows the exact conventions visible in the codebase: Pydantic
 
 ---
 
-### 3. Energy Monitor Tile (`tile_type: "energy"`)
+### 2. Energy Monitor Tile (`tile_type: "energy"`)
 
 **What it does**: Displays real-time power consumption (watts), daily energy usage (kWh), optional cost estimate, and an SVG usage chart. Works with smart plugs, whole-home monitors (Emporia Vue, Sense), and any HA sensor reporting watts or kWh.
 
@@ -863,7 +693,7 @@ Every plan below follows the exact conventions visible in the codebase: Pydantic
 
 ---
 
-### 4. Garbage / Recycling Collection Tile (`tile_type: "waste"`)
+### 3. Garbage / Recycling Collection Tile (`tile_type: "waste"`)
 
 **What it does**: Shows next pickup dates for trash, recycling, and yard waste. Uses HA integrations (Waste Collection Schedule HACS, custom template sensors). Very popular on kitchen dashboards. Display-only — no toggles.
 

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import PROJECT_ROOT, settings
-from app.routers import ha_proxy, layout, weather
+from app.routers import ha_proxy, layout, moon, weather
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -30,6 +30,7 @@ templates = Jinja2Templates(directory=str(PROJECT_ROOT / "app" / "templates"))
 app.include_router(ha_proxy.router)
 app.include_router(layout.router)
 app.include_router(weather.router)
+app.include_router(moon.router)
 
 
 # ---------- Pages ----------

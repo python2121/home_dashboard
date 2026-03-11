@@ -252,8 +252,8 @@ const DashboardApp = (() => {
         tile_type: tileType,
         x: parseInt(el.getAttribute("gs-x")) || 0,
         y: parseInt(el.getAttribute("gs-y")) || 0,
-        w: parseInt(el.getAttribute("gs-w")) || 2,
-        h: parseInt(el.getAttribute("gs-h")) || 2,
+        w: parseInt(el.getAttribute("gs-w")) || 1,
+        h: parseInt(el.getAttribute("gs-h")) || 1,
       };
 
       if (tileType === "weather") {
@@ -279,6 +279,20 @@ const DashboardApp = (() => {
           label:   d.label,
           icon:    d.icon,
           members: JSON.parse(d.members || "[]"),
+        });
+      } else if (tileType === "moon") {
+        tiles.push({
+          ...base,
+          label:        d.label,
+          zip_code:     d.zipCode,
+          country_code: d.countryCode,
+        });
+      } else if (tileType === "clock") {
+        tiles.push({
+          ...base,
+          label:        d.label,
+          format_24h:   d.format24h === "true",
+          show_seconds: d.showSeconds === "true",
         });
       } else {
         tiles.push({
@@ -307,6 +321,14 @@ const DashboardApp = (() => {
       SceneTiles.addSceneTileToGrid(tile, grid, entityStates);
       return;
     }
+    if (tile.tile_type === "moon") {
+      MoonTiles.addMoonTileToGrid(tile, grid);
+      return;
+    }
+    if (tile.tile_type === "clock") {
+      ClockTiles.addClockTileToGrid(tile, grid);
+      return;
+    }
 
     const on = isOn(tile.entity_id);
     const el = document.createElement("div");
@@ -323,7 +345,11 @@ const DashboardApp = (() => {
     content.innerHTML = tileInnerHTML(tile);
     el.appendChild(content);
 
-    grid.addWidget(el, { x: tile.x, y: tile.y, w: tile.w, h: tile.h });
+    el.setAttribute("gs-x", tile.x);
+    el.setAttribute("gs-y", tile.y);
+    el.setAttribute("gs-w", tile.w);
+    el.setAttribute("gs-h", tile.h);
+    grid.addWidget(el);
   }
 
   function renderLayout(layout) {
@@ -341,6 +367,8 @@ const DashboardApp = (() => {
       const type = el.dataset.tileType || "entity";
       if (type === "weather") continue;
       if (type === "forecast_chart") continue;
+      if (type === "moon") continue;
+      if (type === "clock") continue;
       if (type === "scene") {
         if (!SceneTiles.isPending(el.dataset.tileId)) {
           SceneTiles.updateSceneState(el, entityStates);
@@ -449,6 +477,8 @@ const DashboardApp = (() => {
 
     if (type === "weather") return;         // display-only
     if (type === "forecast_chart") return;  // display-only
+    if (type === "moon") return;           // display-only
+    if (type === "clock") return;          // display-only
 
     if (type === "scene") {
       SceneTiles.handleSceneToggle(item, entityStates);
@@ -495,12 +525,14 @@ const DashboardApp = (() => {
   // ── Add-tile modal ─────────────────────────────────────────────────
 
   function activateTab(tabName) {
-    const tabs = document.querySelectorAll(".modal__tab");
-    tabs.forEach((t) => t.classList.toggle("modal__tab--active", t.dataset.tab === tabName));
+    const typeSelect = document.getElementById("tile-type-select");
+    typeSelect.value = tabName;
     document.getElementById("entity-form-section").classList.toggle("section--hidden", tabName !== "entity");
     document.getElementById("scene-form-section").classList.toggle("section--hidden", tabName !== "scene");
     document.getElementById("weather-form-section").classList.toggle("section--hidden", tabName !== "weather");
     document.getElementById("chart-form-section").classList.toggle("section--hidden", tabName !== "chart");
+    document.getElementById("moon-form-section").classList.toggle("section--hidden", tabName !== "moon");
+    document.getElementById("clock-form-section").classList.toggle("section--hidden", tabName !== "clock");
   }
 
   function openAddModal() {
@@ -537,6 +569,14 @@ const DashboardApp = (() => {
       activateTab("chart");
       ForecastChartTiles.populateForEdit(tileEl);
       document.querySelector("#add-chart-form button[type='submit']").textContent = "Save";
+    } else if (type === "moon") {
+      activateTab("moon");
+      MoonTiles.populateForEdit(tileEl);
+      document.querySelector("#add-moon-form button[type='submit']").textContent = "Save";
+    } else if (type === "clock") {
+      activateTab("clock");
+      ClockTiles.populateForEdit(tileEl);
+      document.querySelector("#add-clock-form button[type='submit']").textContent = "Save";
     }
 
     modal.classList.remove("modal--hidden");
@@ -570,6 +610,10 @@ const DashboardApp = (() => {
     if (wForm) wForm.reset();
     const cForm = document.getElementById("add-chart-form");
     if (cForm) cForm.reset();
+    const mForm = document.getElementById("add-moon-form");
+    if (mForm) mForm.reset();
+    const clkForm = document.getElementById("add-clock-form");
+    if (clkForm) clkForm.reset();
 
     // Restore modal to add mode
     editingTileEl = null;
@@ -581,6 +625,10 @@ const DashboardApp = (() => {
     if (weatherSubmit) weatherSubmit.textContent = "Add";
     const chartSubmit = document.querySelector("#add-chart-form button[type='submit']");
     if (chartSubmit) chartSubmit.textContent = "Add";
+    const moonSubmit = document.querySelector("#add-moon-form button[type='submit']");
+    if (moonSubmit) moonSubmit.textContent = "Add";
+    const clockSubmit = document.querySelector("#add-clock-form button[type='submit']");
+    if (clockSubmit) clockSubmit.textContent = "Add";
   }
 
   function populateEntitySelect() {
@@ -694,7 +742,7 @@ const DashboardApp = (() => {
       cellHeight: 100,
       margin: 6,
       animate: true,
-      float: false,
+      float: true,
       disableOneColumnMode: true,
       removable: false,
       staticGrid: true,
@@ -726,6 +774,8 @@ const DashboardApp = (() => {
     SceneTiles.initModal(() => entityStates);
     WeatherTiles.initModal();
     ForecastChartTiles.initModal();
+    MoonTiles.initModal();
+    ClockTiles.initModal();
 
     try {
       setStatus("connecting");
@@ -748,6 +798,8 @@ const DashboardApp = (() => {
     startPolling();
     WeatherTiles.startRefreshTimer();
     ForecastChartTiles.startRefreshTimer();
+    MoonTiles.startRefreshTimer();
+    ClockTiles.startClock();
   }
 
   // ── Public API ──────────────────────────────────────────────────────

@@ -3,6 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+import app.routers.moon as _moon_module
 import app.routers.weather as _weather_module
 
 
@@ -14,6 +15,14 @@ def _clear_weather_cache():
     yield
     _weather_module._cache.clear()
     _weather_module._chart_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_moon_cache():
+    """Reset the in-process moon cache before and after every test."""
+    _moon_module._moon_cache.clear()
+    yield
+    _moon_module._moon_cache.clear()
 
 
 @pytest.fixture(autouse=True)

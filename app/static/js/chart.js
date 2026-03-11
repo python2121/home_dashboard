@@ -269,9 +269,13 @@ const ForecastChartTiles = (() => {
     content.innerHTML = buildTileHTML(tile);
     el.appendChild(content);
 
+    el.setAttribute("gs-x", tile.x);
+    el.setAttribute("gs-y", tile.y);
+    el.setAttribute("gs-w", tile.w);
+    el.setAttribute("gs-h", "1");
     el.setAttribute("gs-min-h", "1");
     el.setAttribute("gs-max-h", "1");
-    grid.addWidget(el, { x: tile.x, y: tile.y, w: tile.w, h: 1, minH: 1, maxH: 1 });
+    grid.addWidget(el);
     refreshTile(el);
   }
 

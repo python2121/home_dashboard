@@ -127,7 +127,11 @@ const WeatherTiles = (() => {
     content.innerHTML = buildTileHTML(tile);
     el.appendChild(content);
 
-    grid.addWidget(el, { x: tile.x, y: tile.y, w: tile.w, h: tile.h });
+    el.setAttribute("gs-x", tile.x);
+    el.setAttribute("gs-y", tile.y);
+    el.setAttribute("gs-w", tile.w);
+    el.setAttribute("gs-h", tile.h);
+    grid.addWidget(el);
     refreshTile(el);
   }
 
