@@ -1,16 +1,19 @@
 """Layout persistence routes.
 
-Tile layout is stored as a JSON file on disk (no database needed).
-The file path is configured via settings.layout_file.
+Each room has its own layout file:
+  - "default" room  → settings.layout_file  (e.g. data/layout.json)
+  - other rooms     → data/layout_{room_id}.json
 """
 
 import contextlib
 import json
 import logging
 import os
+import re
 import tempfile
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.config import settings
 from app.models import Layout
@@ -18,15 +21,20 @@ from app.models import Layout
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/layout", tags=["layout"])
 
-DEFAULT_LAYOUT = Layout(
-    columns=12,
-    tiles=[],
-)
+ROOM_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
+
+DEFAULT_LAYOUT = Layout(columns=12, tiles=[])
 
 
-def _read_layout() -> Layout:
-    """Read the layout from disk, returning the default if the file doesn't exist."""
-    path = settings.layout_file
+def _layout_path(room_id: str) -> Path:
+    base = settings.layout_file
+    if room_id == "default":
+        return base
+    return base.parent / f"layout_{room_id}.json"
+
+
+def _read_layout(room_id: str) -> Layout:
+    path = _layout_path(room_id)
     if not path.exists():
         return DEFAULT_LAYOUT
     try:
@@ -37,9 +45,8 @@ def _read_layout() -> Layout:
         return DEFAULT_LAYOUT
 
 
-def _write_layout(layout: Layout) -> None:
-    """Persist the layout to disk atomically via write-to-temp + rename."""
-    path = settings.layout_file
+def _write_layout(layout: Layout, room_id: str) -> None:
+    path = _layout_path(room_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
     try:
@@ -53,20 +60,32 @@ def _write_layout(layout: Layout) -> None:
 
 
 @router.get("")
-async def get_layout() -> Layout:
-    """Return the current dashboard layout."""
-    return _read_layout()
+async def get_layout(room_id: str = Query(default="default")) -> Layout:
+    """Return the layout for the given room."""
+    if not ROOM_ID_RE.match(room_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid room_id",
+        )
+    return _read_layout(room_id)
 
 
 @router.put("")
-async def save_layout(layout: Layout) -> Layout:
-    """Replace the entire dashboard layout."""
-    # Validate tile IDs are unique
+async def save_layout(
+    layout: Layout,
+    room_id: str = Query(default="default"),
+) -> Layout:
+    """Replace the layout for the given room."""
+    if not ROOM_ID_RE.match(room_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid room_id",
+        )
     ids = [t.id for t in layout.tiles]
     if len(ids) != len(set(ids)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Duplicate tile IDs in layout",
         )
-    _write_layout(layout)
+    _write_layout(layout, room_id)
     return layout

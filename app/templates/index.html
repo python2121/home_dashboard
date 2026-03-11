@@ -23,6 +23,20 @@
   <header id="toolbar" class="toolbar toolbar--hidden">
     <div class="toolbar__left">
       <span class="toolbar__title">Edit Layout</span>
+      <div class="toolbar__room-mgmt">
+        <span id="toolbar-room-name" class="toolbar__room-name"></span>
+        <button id="btn-room-new" class="btn btn--small" title="Add a new room">
+          <i class="mdi mdi-home-plus-outline"></i> New Room
+        </button>
+        <button id="btn-room-delete" class="btn btn--small" title="Delete this room">
+          <i class="mdi mdi-home-remove-outline"></i>
+        </button>
+      </div>
+      <div id="new-room-form" class="new-room-form new-room-form--hidden">
+        <input id="new-room-name" type="text" class="toolbar__room-input" placeholder="Room name…" maxlength="40" />
+        <button id="btn-room-create" class="btn btn--primary btn--small">Create</button>
+        <button id="btn-room-cancel-new" class="btn btn--small">Cancel</button>
+      </div>
     </div>
     <div class="toolbar__right">
       <select id="theme-select" class="btn" title="Theme">
@@ -48,6 +62,15 @@
   <button id="btn-edit" class="fab" title="Edit layout">
     <i class="mdi mdi-pencil"></i>
   </button>
+
+  <!-- Room selector (always visible, top-right) -->
+  <div id="room-selector" class="room-selector">
+    <button id="room-selector-btn" class="room-selector__btn" title="Switch room">
+      <i class="mdi mdi-home-outline"></i>
+      <i class="mdi mdi-chevron-down room-selector__chevron"></i>
+    </button>
+    <div id="room-dropdown" class="room-selector__dropdown room-selector__dropdown--hidden"></div>
+  </div>
 
   <!-- Connection status indicator -->
   <div id="status-indicator" class="status-indicator status-indicator--connecting">

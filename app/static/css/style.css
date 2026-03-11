@@ -253,6 +253,7 @@ html, body {
 /* ---------- Dashboard / Grid ---------- */
 .dashboard {
   height: 100%;
+  overflow: auto;
   padding: 12px;
   transition: padding-top var(--transition);
 }
@@ -263,6 +264,7 @@ html, body {
 
 /* GridStack overrides */
 .grid-stack {
+  width: 1260px; /* 12 columns × 105px — fixed so tiles never resize with the window */
   min-height: 100%;
 }
 
@@ -309,10 +311,10 @@ html, body {
   background: var(--surface);
 }
 
-/* Tile icon — scales with the smaller of width (30cqi) or height (42cqb) so the
+/* Tile icon — scales with the smaller of width (38cqi) or height (52cqb) so the
    icon can never outgrow the tile's vertical space regardless of aspect ratio. */
 .tile__icon {
-  font-size: max(1rem, min(30cqi, 42cqb));
+  font-size: max(1rem, min(38cqi, 52cqb));
   line-height: 1;
   transition: color var(--transition), font-size var(--transition);
 }
@@ -327,7 +329,7 @@ html, body {
 
 /* Tile label — same dual-axis constraint as the icon. */
 .tile__label {
-  font-size: max(0.55rem, min(9cqi, 12cqb));
+  font-size: max(0.65rem, min(12cqi, 16cqb));
   font-weight: 500;
   text-align: center;
   color: var(--text-dim);
@@ -392,6 +394,136 @@ html, body {
 
 .dashboard--editing .tile__edit {
   display: flex;
+}
+
+/* ---------- Room selector ---------- */
+.room-selector {
+  position: fixed;
+  top: 5px;
+  right: 30px; /* leaves room for status dot at 12px */
+  z-index: 85;
+}
+
+.room-selector__btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--tile-off);
+  color: var(--text-dim);
+  border: 1px solid var(--edit-outline);
+  border-radius: 8px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 140px;
+  transition: background var(--transition), color var(--transition);
+}
+
+.room-selector__btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.room-selector__btn #room-selector-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.room-selector__chevron {
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+
+.room-selector__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--edit-outline);
+  border-radius: 8px;
+  min-width: 130px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  z-index: 86;
+}
+
+.room-selector__dropdown--hidden {
+  display: none;
+}
+
+.room-selector__item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.room-selector__item:hover {
+  background: var(--hover-overlay);
+}
+
+.room-selector__item--active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* In edit mode, shift selector below toolbar */
+.dashboard--editing ~ .room-selector {
+  top: calc(var(--toolbar-h) + 10px);
+}
+
+/* ---------- Toolbar room management ---------- */
+.toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar__room-mgmt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar__room-name {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.btn--small {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+}
+
+.new-room-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.new-room-form--hidden {
+  display: none;
+}
+
+.toolbar__room-input {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 0.82rem;
+  width: 160px;
 }
 
 /* ---------- Status indicator ---------- */
@@ -617,6 +749,15 @@ html, body {
 
 .tile__badge:empty {
   display: none;
+}
+
+/* ---------- Entity & scene tiles — tighter padding so content fills more of the tile ---------- */
+
+.tile--on .grid-stack-item-content,
+.tile--off .grid-stack-item-content,
+.tile--scene .grid-stack-item-content {
+  padding: 6px;
+  gap: 4px;
 }
 
 /* ---------- Scene tile ---------- */
@@ -1103,6 +1244,7 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  text-align: center;
   width: 100%;
   height: 100%;
   color: var(--text);

@@ -145,6 +145,13 @@ class Layout(BaseModel):
         return data
 
 
+class Room(BaseModel):
+    """A named layout context (room)."""
+
+    id: str = Field(description="Unique room identifier (URL-safe slug)")
+    name: str = Field(description="Display name for the room")
+
+
 class ServiceCall(BaseModel):
     """Payload for calling a Home Assistant service."""
 

@@ -23,6 +23,10 @@ const DashboardApp = (() => {
   let sceneIconPicker = null;
   const POLL_INTERVAL = 5000; // ms
 
+  // ── Rooms state ────────────────────────────────────────────────────
+  let rooms = [];
+  let currentRoomId = localStorage.getItem("dashboard-room") || "default";
+
   // ── DOM refs ───────────────────────────────────────────────────────
   const $ = (sel) => document.querySelector(sel);
   const toolbar    = $("#toolbar");
@@ -226,12 +230,31 @@ const DashboardApp = (() => {
     return api("POST", `/api/ha/toggle/${encodeURIComponent(entityId)}`);
   }
 
-  async function loadLayout() {
-    return api("GET", "/api/layout");
+  async function loadLayout(roomId) {
+    const params = new URLSearchParams({ room_id: roomId || currentRoomId });
+    return api("GET", `/api/layout?${params}`);
   }
 
-  async function saveLayout(layout) {
-    return api("PUT", "/api/layout", layout);
+  async function saveLayout(layout, roomId) {
+    const params = new URLSearchParams({ room_id: roomId || currentRoomId });
+    return api("PUT", `/api/layout?${params}`, layout);
+  }
+
+  async function fetchRooms() {
+    rooms = await api("GET", "/api/rooms");
+    return rooms;
+  }
+
+  async function apiCreateRoom(name) {
+    return api("POST", "/api/rooms", { name });
+  }
+
+  async function apiDeleteRoom(roomId) {
+    const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, { method: "DELETE" });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status}: ${text}`);
+    }
   }
 
   // ── Status indicator ───────────────────────────────────────────────
@@ -353,7 +376,7 @@ const DashboardApp = (() => {
   }
 
   function renderLayout(layout) {
-    grid.removeAll(false);
+    grid.removeAll(true); // true = also remove DOM elements (prevents ghost tiles on room switch)
     for (const tile of layout.tiles) {
       addTileToGrid(tile);
     }
@@ -420,6 +443,106 @@ const DashboardApp = (() => {
     }
   }
 
+  // ── Rooms ──────────────────────────────────────────────────────────
+
+  function renderRoomSelector() {
+    const dropdown = document.getElementById("room-dropdown");
+    const nameSpan = document.getElementById("room-selector-name");
+    const toolbarName = document.getElementById("toolbar-room-name");
+    const delBtn = document.getElementById("btn-room-delete");
+
+    const current = rooms.find((r) => r.id === currentRoomId);
+    const displayName = current ? current.name : "Room";
+    if (nameSpan) nameSpan.textContent = displayName;
+    if (toolbarName) toolbarName.textContent = displayName;
+    if (delBtn) delBtn.disabled = rooms.length <= 1;
+
+    if (!dropdown) return;
+    dropdown.innerHTML = "";
+    for (const room of rooms) {
+      const btn = document.createElement("button");
+      btn.className = "room-selector__item" + (room.id === currentRoomId ? " room-selector__item--active" : "");
+      btn.textContent = room.name;
+      btn.addEventListener("click", () => {
+        closeRoomDropdown();
+        if (room.id !== currentRoomId) switchRoom(room.id);
+      });
+      dropdown.appendChild(btn);
+    }
+  }
+
+  function openRoomDropdown() {
+    const dropdown = document.getElementById("room-dropdown");
+    if (dropdown) dropdown.classList.remove("room-selector__dropdown--hidden");
+  }
+
+  function closeRoomDropdown() {
+    const dropdown = document.getElementById("room-dropdown");
+    if (dropdown) dropdown.classList.add("room-selector__dropdown--hidden");
+  }
+
+  async function switchRoom(roomId) {
+    currentRoomId = roomId;
+    localStorage.setItem("dashboard-room", roomId);
+    renderRoomSelector();
+    try {
+      const layout = await loadLayout(roomId);
+      renderLayout(layout);
+    } catch (err) {
+      console.error("Failed to load room layout:", err);
+    }
+  }
+
+  async function createRoom() {
+    const input = document.getElementById("new-room-name");
+    const name = input ? input.value.trim() : "";
+    if (!name) return;
+    try {
+      const newRoom = await apiCreateRoom(name);
+      rooms.push(newRoom);
+      if (input) input.value = "";
+      hideNewRoomForm();
+      // Save current grid to current room before switching
+      try { await saveLayout(serializeLayout()); } catch (_) { /* ignore */ }
+      await switchRoom(newRoom.id);
+      renderRoomSelector();
+    } catch (err) {
+      console.error("Failed to create room:", err);
+    }
+  }
+
+  async function deleteCurrentRoom() {
+    if (rooms.length <= 1) return;
+    const current = rooms.find((r) => r.id === currentRoomId);
+    const name = current ? current.name : currentRoomId;
+    if (!confirm(`Delete room "${name}"? This cannot be undone.`)) return;
+    try {
+      await apiDeleteRoom(currentRoomId);
+      rooms = rooms.filter((r) => r.id !== currentRoomId);
+      const nextRoom = rooms[0];
+      await switchRoom(nextRoom.id);
+      renderRoomSelector();
+    } catch (err) {
+      console.error("Failed to delete room:", err);
+    }
+  }
+
+  function showNewRoomForm() {
+    const form = document.getElementById("new-room-form");
+    if (form) {
+      form.classList.remove("new-room-form--hidden");
+      const input = document.getElementById("new-room-name");
+      if (input) input.focus();
+    }
+  }
+
+  function hideNewRoomForm() {
+    const form = document.getElementById("new-room-form");
+    if (form) form.classList.add("new-room-form--hidden");
+    const input = document.getElementById("new-room-name");
+    if (input) input.value = "";
+  }
+
   // ── Edit mode ──────────────────────────────────────────────────────
 
   function enterEditMode() {
@@ -436,9 +559,10 @@ const DashboardApp = (() => {
     dashboard.classList.remove("dashboard--editing");
     btnEdit.classList.remove("fab--hidden");
     grid.setStatic(true);
+    hideNewRoomForm();
 
     try {
-      await saveLayout(serializeLayout());
+      await saveLayout(serializeLayout(), currentRoomId);
     } catch (err) {
       console.error("Failed to save layout:", err);
     }
@@ -739,7 +863,7 @@ const DashboardApp = (() => {
   async function init() {
     grid = GridStack.init({
       column: 12,
-      cellHeight: 100,
+      cellHeight: 105,
       margin: 6,
       animate: true,
       float: true,
@@ -777,6 +901,39 @@ const DashboardApp = (() => {
     MoonTiles.initModal();
     ClockTiles.initModal();
 
+    // Room selector wiring
+    const roomSelectorBtn = document.getElementById("room-selector-btn");
+    if (roomSelectorBtn) {
+      roomSelectorBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const dropdown = document.getElementById("room-dropdown");
+        const hidden = dropdown.classList.contains("room-selector__dropdown--hidden");
+        if (hidden) openRoomDropdown(); else closeRoomDropdown();
+      });
+    }
+    document.addEventListener("click", () => closeRoomDropdown());
+
+    // Toolbar room management wiring
+    const btnRoomNew = document.getElementById("btn-room-new");
+    if (btnRoomNew) btnRoomNew.addEventListener("click", showNewRoomForm);
+
+    const btnRoomCreate = document.getElementById("btn-room-create");
+    if (btnRoomCreate) btnRoomCreate.addEventListener("click", createRoom);
+
+    const btnRoomCancelNew = document.getElementById("btn-room-cancel-new");
+    if (btnRoomCancelNew) btnRoomCancelNew.addEventListener("click", hideNewRoomForm);
+
+    const newRoomNameInput = document.getElementById("new-room-name");
+    if (newRoomNameInput) {
+      newRoomNameInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") createRoom();
+        if (e.key === "Escape") hideNewRoomForm();
+      });
+    }
+
+    const btnRoomDelete = document.getElementById("btn-room-delete");
+    if (btnRoomDelete) btnRoomDelete.addEventListener("click", deleteCurrentRoom);
+
     try {
       setStatus("connecting");
       await fetchStates();
@@ -787,10 +944,20 @@ const DashboardApp = (() => {
     }
 
     try {
-      const layout = await loadLayout();
-      if (layout.tiles.length > 0) {
-        renderLayout(layout);
+      await fetchRooms();
+      // Ensure currentRoomId is a known room; fall back to first available
+      if (!rooms.find((r) => r.id === currentRoomId)) {
+        currentRoomId = rooms[0]?.id || "default";
+        localStorage.setItem("dashboard-room", currentRoomId);
       }
+      renderRoomSelector();
+    } catch (err) {
+      console.error("Failed to fetch rooms:", err);
+    }
+
+    try {
+      const layout = await loadLayout(currentRoomId);
+      renderLayout(layout);
     } catch (err) {
       console.error("Failed to load layout:", err);
     }
