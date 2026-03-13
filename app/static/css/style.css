@@ -136,8 +136,7 @@
   background: inherit;
 }
 
-[data-theme="eink"] .btn:hover,
-[data-theme="eink"] .fab:hover {
+[data-theme="eink"] .btn:hover {
   transform: none;
 }
 
@@ -220,30 +219,29 @@ html, body {
   background: #d13a52;
 }
 
-/* Floating action button */
+/* Edit button — anchored below the room selector */
 .fab {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 56px;
-  height: 56px;
-  border: none;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  font-size: 1.4rem;
+  top: 36px; /* sits just below the room selector (top: 5px + ~28px height + 3px gap) */
+  right: 30px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--edit-outline);
+  border-radius: 8px;
+  background: var(--tile-off);
+  color: var(--text-dim);
+  font-size: 0.85rem;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  z-index: 90;
-  transition: background var(--transition), transform var(--transition);
+  z-index: 85;
+  transition: background var(--transition), color var(--transition);
 }
 
 .fab:hover {
-  background: #4570b5;
-  transform: scale(1.05);
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .fab--hidden {
