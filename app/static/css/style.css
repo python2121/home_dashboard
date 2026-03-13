@@ -219,11 +219,15 @@ html, body {
   background: #d13a52;
 }
 
-/* Edit button — anchored below the room selector */
+/* Controls row inside room selector (home button + edit button side by side) */
+.room-selector__controls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* Edit button — sits inline inside the room selector controls */
 .fab {
-  position: fixed;
-  top: 36px; /* sits just below the room selector (top: 5px + ~28px height + 3px gap) */
-  right: 30px;
   width: 28px;
   height: 28px;
   border: 1px solid var(--edit-outline);
@@ -235,7 +239,6 @@ html, body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 85;
   transition: background var(--transition), color var(--transition);
 }
 

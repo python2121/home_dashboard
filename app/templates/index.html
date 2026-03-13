@@ -58,17 +58,17 @@
     <div class="grid-stack"></div>
   </main>
 
-  <!-- Floating edit button (visible in normal mode) -->
-  <button id="btn-edit" class="fab" title="Edit layout">
-    <i class="mdi mdi-pencil"></i>
-  </button>
-
-  <!-- Room selector (always visible, top-right) -->
+  <!-- Room selector + edit button (always visible, top-right) -->
   <div id="room-selector" class="room-selector">
-    <button id="room-selector-btn" class="room-selector__btn" title="Switch room">
-      <i class="mdi mdi-home-outline"></i>
-      <i class="mdi mdi-chevron-down room-selector__chevron"></i>
-    </button>
+    <div class="room-selector__controls">
+      <button id="room-selector-btn" class="room-selector__btn" title="Switch room">
+        <i class="mdi mdi-home-outline"></i>
+        <i class="mdi mdi-chevron-down room-selector__chevron"></i>
+      </button>
+      <button id="btn-edit" class="fab" title="Edit layout">
+        <i class="mdi mdi-pencil"></i>
+      </button>
+    </div>
     <div id="room-dropdown" class="room-selector__dropdown room-selector__dropdown--hidden"></div>
   </div>
 
