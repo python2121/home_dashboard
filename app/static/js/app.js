@@ -249,6 +249,10 @@ const DashboardApp = (() => {
     return api("POST", "/api/rooms", { name });
   }
 
+  async function apiRenameRoom(roomId, name) {
+    return api("PATCH", `/api/rooms/${encodeURIComponent(roomId)}`, { name });
+  }
+
   async function apiDeleteRoom(roomId) {
     const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, { method: "DELETE" });
     if (!res.ok) {
@@ -528,6 +532,7 @@ const DashboardApp = (() => {
   }
 
   function showNewRoomForm() {
+    hideRenameRoomForm();
     const form = document.getElementById("new-room-form");
     if (form) {
       form.classList.remove("new-room-form--hidden");
@@ -541,6 +546,43 @@ const DashboardApp = (() => {
     if (form) form.classList.add("new-room-form--hidden");
     const input = document.getElementById("new-room-name");
     if (input) input.value = "";
+  }
+
+  function showRenameRoomForm() {
+    hideNewRoomForm();
+    const form = document.getElementById("rename-room-form");
+    if (form) {
+      form.classList.remove("new-room-form--hidden");
+      const input = document.getElementById("rename-room-name");
+      if (input) {
+        const current = rooms.find((r) => r.id === currentRoomId);
+        input.value = current ? current.name : "";
+        input.focus();
+        input.select();
+      }
+    }
+  }
+
+  function hideRenameRoomForm() {
+    const form = document.getElementById("rename-room-form");
+    if (form) form.classList.add("new-room-form--hidden");
+    const input = document.getElementById("rename-room-name");
+    if (input) input.value = "";
+  }
+
+  async function renameCurrentRoom() {
+    const input = document.getElementById("rename-room-name");
+    const name = input ? input.value.trim() : "";
+    if (!name) return;
+    try {
+      const updated = await apiRenameRoom(currentRoomId, name);
+      const idx = rooms.findIndex((r) => r.id === currentRoomId);
+      if (idx !== -1) rooms[idx] = updated;
+      hideRenameRoomForm();
+      renderRoomSelector();
+    } catch (err) {
+      console.error("Failed to rename room:", err);
+    }
   }
 
   // ── Edit mode ──────────────────────────────────────────────────────
@@ -560,6 +602,7 @@ const DashboardApp = (() => {
     btnEdit.classList.remove("fab--hidden");
     grid.setStatic(true);
     hideNewRoomForm();
+    hideRenameRoomForm();
 
     try {
       await saveLayout(serializeLayout(), currentRoomId);
@@ -928,6 +971,23 @@ const DashboardApp = (() => {
       newRoomNameInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") createRoom();
         if (e.key === "Escape") hideNewRoomForm();
+      });
+    }
+
+    const btnRoomRename = document.getElementById("btn-room-rename");
+    if (btnRoomRename) btnRoomRename.addEventListener("click", showRenameRoomForm);
+
+    const btnRoomRenameSave = document.getElementById("btn-room-rename-save");
+    if (btnRoomRenameSave) btnRoomRenameSave.addEventListener("click", renameCurrentRoom);
+
+    const btnRoomCancelRename = document.getElementById("btn-room-cancel-rename");
+    if (btnRoomCancelRename) btnRoomCancelRename.addEventListener("click", hideRenameRoomForm);
+
+    const renameRoomNameInput = document.getElementById("rename-room-name");
+    if (renameRoomNameInput) {
+      renameRoomNameInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") renameCurrentRoom();
+        if (e.key === "Escape") hideRenameRoomForm();
       });
     }
 

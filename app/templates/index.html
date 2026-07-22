@@ -28,6 +28,9 @@
         <button id="btn-room-new" class="btn btn--small" title="Add a new room">
           <i class="mdi mdi-home-plus-outline"></i> New Room
         </button>
+        <button id="btn-room-rename" class="btn btn--small" title="Rename this room">
+          <i class="mdi mdi-pencil-outline"></i>
+        </button>
         <button id="btn-room-delete" class="btn btn--small" title="Delete this room">
           <i class="mdi mdi-home-remove-outline"></i>
         </button>
@@ -36,6 +39,11 @@
         <input id="new-room-name" type="text" class="toolbar__room-input" placeholder="Room name…" maxlength="40" />
         <button id="btn-room-create" class="btn btn--primary btn--small">Create</button>
         <button id="btn-room-cancel-new" class="btn btn--small">Cancel</button>
+      </div>
+      <div id="rename-room-form" class="new-room-form new-room-form--hidden">
+        <input id="rename-room-name" type="text" class="toolbar__room-input" placeholder="Room name…" maxlength="40" />
+        <button id="btn-room-rename-save" class="btn btn--primary btn--small">Save</button>
+        <button id="btn-room-cancel-rename" class="btn btn--small">Cancel</button>
       </div>
     </div>
     <div class="toolbar__right">

@@ -80,6 +80,40 @@ def test_delete_room_invalid_id(client):
     assert res.status_code in (400, 404, 422)
 
 
+def test_rename_room(client):
+    """PATCH /api/rooms/{room_id} updates the room's display name."""
+    new = client.post("/api/rooms", json={"name": "Old Name"}).json()
+    room_id = new["id"]
+
+    res = client.patch(f"/api/rooms/{room_id}", json={"name": "New Name"})
+    assert res.status_code == 200
+    assert res.json()["name"] == "New Name"
+    assert res.json()["id"] == room_id  # ID is unchanged
+
+    # Name persists in listing
+    rooms = client.get("/api/rooms").json()
+    match = next(r for r in rooms if r["id"] == room_id)
+    assert match["name"] == "New Name"
+
+
+def test_rename_room_empty_name(client):
+    """PATCH /api/rooms/{room_id} with empty name returns 400."""
+    res = client.patch("/api/rooms/default", json={"name": "   "})
+    assert res.status_code == 400
+
+
+def test_rename_room_not_found(client):
+    """PATCH /api/rooms/{room_id} returns 404 for unknown room."""
+    res = client.patch("/api/rooms/does_not_exist", json={"name": "Whatever"})
+    assert res.status_code == 404
+
+
+def test_rename_room_invalid_id(client):
+    """PATCH /api/rooms/{room_id} returns 400 for invalid IDs."""
+    res = client.patch("/api/rooms/../../etc/passwd", json={"name": "X"})
+    assert res.status_code in (400, 404, 422)
+
+
 # ── Per-room layout isolation ────────────────────────────────────────
 
 
